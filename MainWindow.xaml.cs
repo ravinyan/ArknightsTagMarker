@@ -76,7 +76,10 @@ namespace ArknightsTagMarker
             while (Ptr == 0x0000000000000000)
             {
                 Ptr = processes[0].MainWindowHandle;
-            }    
+            }
+
+            // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
+            TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
 
             timer.Start();
         }
@@ -114,8 +117,8 @@ namespace ArknightsTagMarker
         public string ExtractedText()
         {
             string text = "";
-
-            TesseractEngine engine = new TesseractEngine($"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\\source\\repos\\test2\\tessdata", "eng", EngineMode.Default);
+    
+            TesseractEngine engine = new TesseractEngine($"{TesseractEnviornment.CustomSearchPath}\\tessdata", "eng", EngineMode.Default);
             engine.DefaultPageSegMode = PageSegMode.RawLine;
 
             for (int i = 0; i < 6; i++)
@@ -151,7 +154,7 @@ namespace ArknightsTagMarker
         {
             // regex to reduce random noise characters that appear                               im sorry but W H Y???   i dont care IT WORKS and .| doesnt
             string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}", "").Replace(".", "");
-
+            
             // for testing
             //Melee, DPS, FastRedeploy, AOE, Slow, 
             //string OCRTags = "Shift, DPS, FastRedeploy, AOE, Slow, ";

@@ -37,8 +37,19 @@
                     <ColumnDefinition Width="50"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="TextBox4StarTags" Grid.Row="0" Background="black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="4* Tags: "></TextBlock>
-                <TextBlock x:Name="TextBox5StarTags" Grid.Row="1" Background="black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="5* Tags: "></TextBlock>
+                <Border BorderThickness="2" BorderBrush="Black" Grid.Row="0">
+                    <TextBlock x:Name="TextBox4StarTags"  Background="Transparent" Foreground="Black" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="4* Tags: "></TextBlock>
+                </Border>
+
+                <Border BorderThickness="2" BorderBrush="Black" Grid.Row="1">
+                    <TextBlock x:Name="TextBox5StarTags" Background="Transparent" Foreground="Black" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="5* Tags: "></TextBlock>
+                </Border>
+
+                <!--- opaque version
+                <TextBlock x:Name="TextBox4StarTags" Grid.Row="0" Background="Black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="4* Tags: "></TextBlock>
+                <TextBlock x:Name="TextBox5StarTags" Grid.Row="1" Background="Black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="5* Tags: "></TextBlock>
+                -->
+                
                 <Button x:Name="CloseAppButton" Click="CloseAppButtonClick" Grid.Column="1">
                     <TextBlock TextWrapping="Wrap">Close</TextBlock>
                 </Button>

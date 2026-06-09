@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿
+using ImageMagick;
+using System.Diagnostics;
 using System.Drawing;
 using System.Numerics;
 using System.Text.RegularExpressions;
@@ -64,50 +66,75 @@ namespace ArknightsTagMarker
             timer.Interval = TimeSpan.FromMilliseconds(200);
             timer.Tick += Update;
 
-            Process[] processes;
-            do
-            {   // what program window should follow here
-                processes = Process.GetProcessesByName("dnplayer");
-            }
-            while (processes.Length == 0);
-
+            // what program window should follow here
+            Process[] processes = Process.GetProcessesByName("dnplayer");
             Ptr = processes[0].MainWindowHandle;
-
-            while (Ptr == 0x0000000000000000)
-            {
-                Ptr = processes[0].MainWindowHandle;
-            }
 
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
             TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
 
+            Engine = new TesseractEngine($"{TesseractEnviornment.CustomSearchPath}\\tessdata", "eng", EngineMode.Default);
+            Engine.DefaultPageSegMode = PageSegMode.RawLine;
+
+            MagickReadSettings.Density = new Density(300, DensityUnit.PixelsPerInch);
+
             timer.Start();
         }
 
+        TesseractEngine Engine;
+        MagickReadSettings MagickReadSettings = new MagickReadSettings();
+        Stopwatch w = new Stopwatch();
         private void Update(object? sender, EventArgs e)
         {
+            //w.Start();
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
 
+            List<IMagickColor<byte>> help = new List<IMagickColor<byte>>();
             Vector2[] boxes = CreateTagBoxes();
-
             try
             {
-                Bitmap bitmap = new Bitmap((int)(Width * 0.17), (int)(Height * 0.13));
-                Graphics g = Graphics.FromImage(bitmap);
                 for (int i = 0; i < boxes.Length; i++)
                 {
-                    Vector2 box = boxes[i];
-                    g.CopyFromScreen((int)(box.X), (int)(box.Y), 0, 0, bitmap.Size);
-                    bitmap.Save($"banana{i}.png", System.Drawing.Imaging.ImageFormat.Png);
+                    MagickReadSettings.ExtractArea = new MagickGeometry((int)boxes[i].X, (int)boxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
+                    using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                    {
+                        MagickColor cc = new MagickColor();
+                        image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
+
+                        // fun
+                        //var a = image.GetPixels();
+                        //if (i ==0)
+                        //{
+                        //    foreach (var aa in a)
+                        //    {
+                        //        IMagickColor<byte>? aaaa = a.GetPixel(aa.X, aa.Y).ToColor();
+                        //        help.Add(aaaa);
+                        //        var aaa = a.GetPixel(aa.X, aa.Y);
+                        //        if (aaaa.R == 233 && aaaa.G == 233 && aaaa.B == 234)
+                        //        {
+                        //            aaa.SetChannel(0, 1);
+                        //            aaa.SetChannel(1, 1);
+                        //            aaa.SetChannel(2, 1);
+                        //        }
+                        //        
+                        //        //a.SetPixel(aa.X, aa.Y, );
+                        //        //IMagickColor<ushort>? aaa = aa.ToColor();
+                        //        //aa[0] = aaa;
+                        //    }
+                        //}
+
+                        image.Write($"banana{i}.tiff", MagickFormat.Tiff);
+                    }
                 }
-                g.Dispose();
-                bitmap.Dispose();
 
                 MarkTag();
             } catch { } // so app doesnt crashh when app in launched but ldplayer is not
-           
+
+            //w.Stop();
+            //Console.WriteLine(w.ElapsedMilliseconds);
+            //w.Reset();
             // it basically doesnt affect performance at all but cuts off RAM jumping from 100MB to ~300MB+ and then clears,
             // to stable <100MB RAM consumption and there is nothing in memory that needs to be saved anyway
             // if there are problems just comment this tho i didnt see any
@@ -117,20 +144,16 @@ namespace ArknightsTagMarker
         public string ExtractedText()
         {
             string text = "";
-    
-            TesseractEngine engine = new TesseractEngine($"{TesseractEnviornment.CustomSearchPath}\\tessdata", "eng", EngineMode.Default);
-            engine.DefaultPageSegMode = PageSegMode.RawLine;
-
             for (int i = 0; i < 6; i++)
             {
-                Pix img = Pix.LoadFromFile($"banana{i}.png");
+                Pix img = Pix.LoadFromFile($"banana{i}.tiff");
                 Pix scaledImage = img.Scale(2, 2);
 
                 // doesnt really help but leaving it here to know this even exists
                 //Pix grayImage = scaledImage.ConvertRGBToGray();
                 //Pix thresholdedPix = grayImage.BinarizeOtsuAdaptiveThreshold(16, 16, 0, 0, 1.0f);
 
-                Tesseract.Page page = engine.Process(scaledImage);
+                Tesseract.Page page = Engine.Process(scaledImage);
                 string pageText = page.GetText();
                 if (pageText != "")
                 {
@@ -143,9 +166,9 @@ namespace ArknightsTagMarker
                 }
 
                 page.Dispose();
+                scaledImage.Dispose();
                 img.Dispose();
             }
-            engine.Dispose();
 
             return text;
         }
@@ -154,7 +177,7 @@ namespace ArknightsTagMarker
         {
             // regex to reduce random noise characters that appear                               im sorry but W H Y???   i dont care IT WORKS and .| doesnt
             string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}", "").Replace(".", "");
-            
+
             // for testing
             //Melee, DPS, FastRedeploy, AOE, Slow, 
             //string OCRTags = "Shift, DPS, FastRedeploy, AOE, Slow, ";
@@ -183,7 +206,13 @@ namespace ArknightsTagMarker
                     }
 
                     // this is one character??? H O W ??? sure i guess you learn something new everyday
-                    if (tags[i][0] == 'ﬁ')
+                    //if (tags[i][0] == 'ﬁ')
+                    //{
+                    //    string newTagName = tags[i].Remove(0, 1);
+                    //    tags[i] = newTagName;
+                    //}
+
+                    if (char.IsLower(tags[i][0]))
                     {
                         string newTagName = tags[i].Remove(0, 1);
                         tags[i] = newTagName;
@@ -192,12 +221,35 @@ namespace ArknightsTagMarker
                 catch { } // just so app doesnt crash and continues working in rare situations
             }
 
+            for (int i = 0; i < tags.Length - 1; i++)
+            {
+                Console.WriteLine(tags[i]);
+            }
+
             (string, Rarity)[] combos = null!;
             // so many loops!
             // i bet there are better ways to do this but im lazy and only like 1 list has 8 items with average of like 5 or less
             // in worst case scenario it takes <1ms so if someone has a problem i have lego you can step on
             for (int i = 0; i < tags.Length - 1; i++)
             {
+                w.Start();
+                // maybe i can do something here... but im stupid so maybe later this is just kinda idea
+                foreach (string star4Tag in Solo4StarTags)
+                {
+                    // while loop might work better
+                    int matchedChars = 0;
+                    for (int ii = 0; ii < (star4Tag.Length >= tags[i].Length ? star4Tag.Length : tags[i].Length); ii++)
+                    {
+                        if (matchedChars == star4Tag.Length)
+                        {
+                            AddTextComboToBox(Rarity.Star4, tags, i);
+                        }
+                    }
+                }
+                w.Stop();
+                Console.WriteLine(w.ElapsedMilliseconds);
+                w.Reset();
+
                 if (Solo4StarTags.Contains(tags[i]))
                 {
                     AddTextComboToBox(Rarity.Star4, tags, i);

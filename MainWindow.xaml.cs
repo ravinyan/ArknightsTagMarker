@@ -1,8 +1,6 @@
 ﻿using ImageMagick;
 using System.Diagnostics;
-using System.Drawing;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -34,8 +32,8 @@ namespace ArknightsTagMarker
         /// Number of boxes containing tags in game
         /// </summary>
         const int BoxCount = 5;
+        Vector2[] TagBoxes = new Vector2[BoxCount];
 
-        // all of these here are just so its easy to access
         // made based on this https://www.reddit.com/r/arknights/comments/1m1xsrj/recruitment_tag_quick_reference_guide/
         HashSet<string> Solo4StarTags = ["CrowdControl", "Debuff", "Nuker", "Shift", "Support", "Specialist", "Summon", "FastRedeploy"];
 
@@ -63,6 +61,12 @@ namespace ArknightsTagMarker
            { (( "AOE", "DPS", "Melee"), Rarity.Star5) },
         };
 
+        TesseractEngine Engine;
+        MagickReadSettings MagickReadSettings = new MagickReadSettings();
+        MorphologySettings MorphologySettings;
+
+        // yes i know code can be better, yes i know its not perfectly optimal, yes i can probably have update loop take <100ms instad of <200ms
+        // and yes I DONT CARE about any of that in this small app that is supposed to be launched for 15s
         public MainWindow()
         {
             InitializeComponent();
@@ -71,9 +75,9 @@ namespace ArknightsTagMarker
             timer.Interval = TimeSpan.FromMilliseconds(200);
             timer.Tick += Update;
 
-            // what program window should follow here
+            // what program window should follow here, if program to follow doesnt exist app WILL (intended) crash into oblivion
             Process[] processes = Process.GetProcessesByName("dnplayer");
-            Ptr = processes[0].MainWindowHandle;
+            Ptr = processes[1].MainWindowHandle;
 
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
             TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
@@ -84,10 +88,11 @@ namespace ArknightsTagMarker
             // single column > single line > raw line
             //  ^ seems best from all the options other ones either dont work or are just worse than best option
             Engine.DefaultPageSegMode = PageSegMode.SingleColumn;
+
             MagickReadSettings.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
             MorphologySettings = new MorphologySettings()
             {
-                Iterations = 2,
+                Iterations = 2, // 1 was too little and 2 seems perfect
                 Kernel = Kernel.Diamond,
                 Method = MorphologyMethod.Erode,
             };
@@ -95,22 +100,21 @@ namespace ArknightsTagMarker
             timer.Start();
         }
 
-        TesseractEngine Engine;
-        MagickReadSettings MagickReadSettings = new MagickReadSettings();
-        MorphologySettings MorphologySettings;
-
-        Vector2[] TagBoxes = new Vector2[5];
         Stopwatch w = new Stopwatch();
         private void Update(object? sender, EventArgs e)
         {
+            #if DEBUG   
             w.Start();
+            #endif
+
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
             UpdateTagBoxesPositionData();
+            ResizeResultBoxFontSize();
 
-            try
-            {
+            //try
+            //{
                 for (int i = 0; i < BoxCount; i++)
                 {
                     // after tweeking a lot of settings for hours this seems very good... slow but it works very well
@@ -120,6 +124,7 @@ namespace ArknightsTagMarker
                         image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
 
                         // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
+                        // 400 seems pretty good there with all other configurations i have set up
                         image.Scale(new Percentage(100 / (image.Width / 400.0)));
                         image.Morphology(MorphologySettings);
 
@@ -132,22 +137,27 @@ namespace ArknightsTagMarker
                                 IMagickColor<byte>? currentPixelColour = pixel.ToColor();
                                 if (currentPixelColour.R < 50 && currentPixelColour.G < 50 && currentPixelColour.B < 50)
                                 {
-                                    // too dark(low) = bad, too bright(high) = bad
+                                    // too dark(low) = bad, too bright(high) = bad, 40 seems perfect
                                     pixel.SetChannel(0, 40);
                                 }
                             }
                         }
 
+                        // idk if format matters coz from what i tested everything seems the same... saw that someone wrote
+                        // that .tiff has best accuracy but i didnt see difference between tiff, png and jpeg... but will trust this
+                        // random internet person anyway since i know nothing about that stuff and it was in topic of Tesseract OCR
                         image.Write($"banana{i}.tiff", MagickFormat.Tiff);
                     }
                 }
 
                 MarkTag();
-            } catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
+            //} catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
 
+            #if DEBUG
             w.Stop();
             Console.WriteLine(w.ElapsedMilliseconds);
             w.Reset();
+            #endif
         }
 
         public string ExtractedText()
@@ -179,12 +189,13 @@ namespace ArknightsTagMarker
 
         public void MarkTag()
         {
-            // regex to reduce random noise characters that appear                               im sorry but W H Y???   i dont care IT WORKS and .| doesnt
+            // regex to reduce random noise characters that appear                               im sorry but WHY???        i dont care IT WORKS and .| doesnt
             string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}|I| ", "").Replace(".", "");
 
             // for testing
-            //Melee, DPS, FastRedeploy, AOE, Slow, 
-            //string OCRTags = "Shift, DPS, FastRedeploy, AOE, Slow, ";
+            //string OCRTags = "Shift,DPS,FastRedeploy,AOE,Slow";
+            //string OCRTags = "Meleee,PS,FastERedeploy,ABE,Slaow";
+            //string OCRTags = "Melee,DPS,FastRedeploy,AOE,Slow";
 
             string[] tags = OCRTags.Split(",");
 
@@ -203,7 +214,7 @@ namespace ArknightsTagMarker
                     }
 
                     // noise character removal at first index
-                    if (tags[i][0] == 'r' || tags[i][0] == 'C' && tags[i][1] != 'r')
+                    if (tags[i][0] == 'C' && tags[i][1] != 'r')
                     {
                         string newTagName = tags[i].Remove(0, 1);
                         tags[i] = newTagName;
@@ -216,6 +227,7 @@ namespace ArknightsTagMarker
                     //    tags[i] = newTagName;
                     //}
 
+                    // all tags start with higher case letters
                     if (char.IsLower(tags[i][0]))
                     {
                         string newTagName = tags[i].Remove(0, 1);
@@ -225,49 +237,37 @@ namespace ArknightsTagMarker
                 catch { } // just so app doesnt crash and continues working in rare situations
             }
 
+            #if DEBUG
             for (int i = 0; i < BoxCount; i++)
             {
                 Console.WriteLine(tags[i]);
             }
+            #endif
 
             (string, Rarity)[] combos = null!;
-            // so many loops!
-            // and it starting to be kinda slow but accuracy >>>> speed
-            // it is better to have 300ms loop that has almost 100% accuracy vs 100ms loop that has 20% accuracy
+            // so many loops! and its not that slow either yaaay
             for (int i = 0; i < BoxCount; i++)
             {
-                //if (Solo4StarTags.Contains(tags[i]))
-                //{
-                //    //AddTextComboToBox(Rarity.Star4, tags, i);
-                //}
-
-                // this is good
-                (bool containsTag, string tag) result = ContainsTag(Solo4StarTags.AsEnumerable(), tags, i);
-                if (result.containsTag == true)
+                foreach (string tag in Solo4StarTags)
                 {
-                    AddTextComboToBox2(Rarity.Star4, result.tag);
+                    if (IsSame(tag, tags[i]))
+                    {
+                        AddTagsToBox(Rarity.Star4, tag);
+                    }
                 }
 
-                //(bool containsTag, (string, Rarity)[] combos) result2 = ContainsDictionaryKey(Tag2Combos, tags, i);
-                //if (result.containsTag == true)
-                //{
-                //    combos = result2.combos;
-                //}
-
-                if (Tag2Combos.ContainsKey(tags[i]))
-                {
-                    combos = Tag2Combos[tags[i]];
-                }
-
+                // passing reference coz tag name might not be correct and function also fixes that
+                // (0DPS > DPS, upporter > Supporter etc.) so that tags[i] has correct value for function below
+                combos = GetCombosFromDictionary(Tag2Combos, ref tags[i]);
                 for (int j = 0; j < BoxCount; j++)
                 {
                     if (combos != null)
                     {
                         foreach ((string tag, Rarity r) s in combos)
                         {
-                            if (tags[i] != tags[j] && s.tag == tags[j])
+                            if (i != j && IsSame(s.tag, tags[j]))
                             {
-                                AddTextComboToBox(s.r, tags, i, j);
+                                AddTagsToBox(s.r, tags[i], s.tag);
                             }
                         }
                     }
@@ -277,9 +277,9 @@ namespace ArknightsTagMarker
                     {
                         foreach (((string tag1, string tag2, string tag3), Rarity r) s in Tag3Combos)
                         {
-                            if (s.Item1.tag1 == tags[i] && s.Item1.tag2 == tags[j] && s.Item1.tag3 == tags[k])
+                            if (IsSame(s.Item1.tag1, tags[i]) && IsSame(s.Item1.tag2, tags[j]) && IsSame(s.Item1.tag3, tags[k]))
                             {
-                                AddTextComboToBox(s.r, tags, i, j, k);
+                                AddTagsToBox(s.r, s.Item1.tag1, s.Item1.tag2, s.Item1.tag3);
                             }
                         }
                     }
@@ -289,65 +289,104 @@ namespace ArknightsTagMarker
             }
         }
 
-        public (bool containsTag, (string, Rarity)[] combos) ContainsDictionaryKey(Dictionary<string, (string, Rarity)> tags, string[] inBoxTags, int i)
+        public bool IsSame(string tag1, string tag2box)
         {
-            // use maybe that for modified tag and remove here noise characters, then use that in return value
-            // for correct results
-            string newString;
-
-            foreach (string tag in tags.Keys)
+            if (Math.Abs(tag1.Length - tag2box.Length) > 2)
             {
-                int matchedChars = 0;
-                int wrongCharCount = 0;
-                for (int jj = 0; jj < tag.Length; jj++)
-                {
-                    if (jj + wrongCharCount < inBoxTags[i].Length && tag[jj] == inBoxTags[i][jj + wrongCharCount])
-                    {
-                        matchedChars++;
-                    }
-                    else
-                    {
-                        wrongCharCount++; // tags can have more letters due ocr adding some random characters
-                    }
-
-                    if (matchedChars >= tag.Length - 1) // 1 letter can be wrong
-                    {
-                        return (true, Tag2Combos[inBoxTags[i]]);
-                    }
-                }
+                return false; // if length difference is higher than 1 (coz there can be only 1 wrong letter), then skip
             }
 
-            return (false, Tag2Combos[inBoxTags[i]]);
-        }
-
-        public (bool containsTag, string tag) ContainsTag(IEnumerable<string> tags, string[] inBoxTags, int i)
-        {
-            foreach (string tag in tags)
+            int matchedChars = 0;
+            int wrongCharCount = 0;
+            int longestTagLength = tag1.Length > tag2box.Length ? tag1.Length : tag2box.Length;
+            for (int ii = 0; ii < tag1.Length; ii++)
             {
-                int matchedChars = 0;
-                int wrongCharCount = 0;
-                for (int ii = 0; ii < tag.Length; ii++)
+                if (ii + wrongCharCount < longestTagLength && tag1[ii] == tag2box[ii + wrongCharCount])
                 {
-                    if (ii + wrongCharCount < inBoxTags[i].Length && tag[ii] == inBoxTags[i][ii + wrongCharCount])
-                    {
-                        matchedChars++;
-                    }
-                    else
+                    matchedChars++;
+                }
+                else
+                {
+                    if (tag1.Length < tag2box.Length)
                     {
                         wrongCharCount++; // tags can have more letters due to OCR adding some random characters
                     }
-
-                    if (matchedChars >= tag.Length - 1) // 1 letter can be wrong
+                    else if (tag1.Length > tag2box.Length)
                     {
-                        return (true, tag);
+                        wrongCharCount--; // or less letters
+                    }
+                    // if == then dont do anything
+                }
+
+                if (matchedChars >= tag1.Length - 1) // 1 letter can be wrong
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public (string, Rarity)[] GetCombosFromDictionary(Dictionary<string, (string, Rarity)[]> tags, ref string inBoxTag)
+        {
+            // use maybe that for modified tag and remove here noise characters, then use that in return value
+            // for correct results
+            inBoxTag = "fDebutf";
+
+            foreach (string tag in tags.Keys)
+            {
+                if (inBoxTag == "fDebutf" && tag == "Debuff")
+                {
+
+                }
+                // fDebutf not working
+                string newString = inBoxTag;
+                int matchedChars = 0;
+                int wrongCharCount = 0;
+                int longestTagLength = tag.Length > inBoxTag.Length ? tag.Length : inBoxTag.Length;
+                for (int ii = 0; ii < tag.Length; ii++)
+                {
+                    if (ii + wrongCharCount < inBoxTag.Length && tag[ii] == inBoxTag[ii + wrongCharCount])
+                    {
+                        matchedChars++;
+                    }
+                    else
+                    {
+                        if (tag.Length < inBoxTag.Length)
+                        {
+                            newString = inBoxTag.Remove(ii, 1);
+
+                            wrongCharCount++; // tags can have more letters due to OCR adding some random characters
+                        }
+                        else if (tag.Length > inBoxTag.Length)
+                        {
+                            string temp = tag[ii].ToString();
+                            newString = temp + newString;
+
+                            wrongCharCount--; // or less letters
+                        }
+                        else // or same amount
+                        {
+                            string temp = tag[ii].ToString();
+                            newString = temp + newString;
+                        }
+                    }
+                }
+
+                if (matchedChars >= tag.Length - 1) // 1 letter can be wrong
+                {
+                    inBoxTag = newString; // correct box tag in case its not correct
+                    if (Tag2Combos.ContainsKey(newString))
+                    {
+                        return Tag2Combos[newString];
                     }
                 }
             }
 
-            return (false, "");
+            return null!;
         }
 
-        public void AddTextComboToBox2(Rarity r, string tag1 = "", string tag2 = "", string tag3 = "")
+        public void AddTagsToBox(Rarity r, string tag1 = "", string tag2 = "", string tag3 = "")
         {
             if (tag3 != "")
             {
@@ -396,52 +435,17 @@ namespace ArknightsTagMarker
             }
         }
 
-        public void AddTextComboToBox(Rarity r, string[] tags, int i = -1, int j = -1, int k = -1)
+        public void ResizeResultBoxFontSize()
         {
-            if (i != -1 && j != -1 && k != -1)
+            if (Width < 700 && Height < 400)
             {
-                if (r == Rarity.Star4)
-                {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tags[i]}, {tags[j]}, {tags[k]})";
-                    TextBox4StarTags.Text = temp;
-                }
-                else
-                {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tags[i]}, {tags[j]}, {tags[k]})";
-                    TextBox5StarTags.Text = temp;
-                }
+                TextBox4StarTags.FontSize = 7;
+                TextBox5StarTags.FontSize = 7;
             }
-            else if (i != -1 && j != -1)
+            else
             {
-                if (r == Rarity.Star4)
-                {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tags[i]}, {tags[j]}), ";
-                    TextBox4StarTags.Text = temp;
-                }
-                else
-                {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tags[i]}, {tags[j]}), ";
-                    TextBox5StarTags.Text = temp;
-                }
-            }
-            else if (i != -1)
-            {
-                if (r == Rarity.Star4)
-                {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tags[i]}), ";
-                    TextBox4StarTags.Text = temp;
-                }
-                else
-                {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tags[i]}), ";
-                    TextBox5StarTags.Text = temp;
-                }
+                TextBox4StarTags.FontSize = 11;
+                TextBox5StarTags.FontSize = 11;
             }
         }
 
@@ -487,7 +491,7 @@ namespace ArknightsTagMarker
             float col2 = (float)(CapturedWindowRect.Left + (Width * 0.61));
             float col3 = (float)(CapturedWindowRect.Left + (Width * 0.80));
 
-            TagBoxes = new Vector2[5]
+            TagBoxes = new Vector2[BoxCount]
             {
                 new Vector2(col1, row1),
                 new Vector2(col2, row1),

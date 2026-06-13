@@ -83,6 +83,7 @@ namespace ArknightsTagMarker
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
             TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
 
+            // here will be custom trained data if i make it somehow work
             Engine = new TesseractEngine($"{TesseractEnviornment.CustomSearchPath}\\tessdata", "eng", EngineMode.Default);
 
             // accuracy options test

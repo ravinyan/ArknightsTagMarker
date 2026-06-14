@@ -1,10 +1,12 @@
 ﻿using ImageMagick;
 using System.Diagnostics;
+using System.Drawing;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Converters;
 using System.Windows.Threading;
 using Tesseract;
 
@@ -83,21 +85,22 @@ namespace ArknightsTagMarker
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
             TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
 
-            // here will be custom trained data if i make it somehow work
+            // custom models wont work coz when i try to train tesseract the trained models are always bad
+            // might be skill issue but i followed documentation on how to do it so if this is not good enough then goodbye
             Engine = new TesseractEngine($"{TesseractEnviornment.CustomSearchPath}\\tessdata", "eng", EngineMode.Default);
 
             // accuracy options test
-            // single column > single line > raw line
+            // single word > single column > single line > raw line
             //  ^ seems best from all the options other ones either dont work or are just worse than best option
-            
+            Engine.DefaultPageSegMode = PageSegMode.SingleWord;
 
             MagickReadSettings.Density = new Density(300, 300, DensityUnit.PixelsPerInch);
-            MorphologySettings = new MorphologySettings()
-            {
-                Iterations = 2, // 1 was too little and 2 seems perfect
-                Kernel = Kernel.Diamond,
-                Method = MorphologyMethod.Erode,
-            };
+            //MorphologySettings = new MorphologySettings()
+            //{
+            //    Iterations = 1, // 1 was too little and 2 seems perfect
+            //    Kernel = Kernel.Diamond,
+            //    Method = MorphologyMethod.Erode,
+            //};
 
             timer.Start();
         }
@@ -117,22 +120,39 @@ namespace ArknightsTagMarker
 
             try
             {
+                // old implementation but will leave it here for now coz i already wanted it 3 times to check something
+                //Bitmap bitmap = new Bitmap((int)(Width * 0.17), (int)(Height * 0.13));
+                //Graphics g = Graphics.FromImage(bitmap);
+                //for (int i = 0; i < BoxCount; i++)
+                //{
+                //    g.CopyFromScreen((int)(TagBoxes[i].X), (int)(TagBoxes[i].Y), 0, 0, bitmap.Size);
+                //    bitmap.Save($"banana{i}.png", System.Drawing.Imaging.ImageFormat.Png);
+                //}
+                //g.Dispose();
+                //bitmap.Dispose();
+
                 for (int i = 0; i < BoxCount; i++)
                 {
+                    // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
                     // after tweeking a lot of settings for hours this seems very good... slow but it works very well
-                    MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
-                    //MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.19), (uint)(Height * 0.13));
+                    MagickReadSettings.ExtractArea = new MagickGeometry(
+                        (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10, 
+                        (uint)(Width * 0.15), (uint)(Height * 0.05));
+                    
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
-                        image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
+                        // some options i used but werent really needed but i will leave this commented to know it exists
+                        //image.Morphology(MorphologySettings);
+                        //image.AdaptiveSharpen(0, 30.0);
+                        //image.UnsharpMask(1, 1);
+                        //image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
 
                         // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
                         // 400 seems pretty good there with all other configurations i have set up
-                        image.Scale(new Percentage(100 / (image.Width / 400.0)));
-                        //image.Morphology(MorphologySettings);
-                        //image.AdaptiveSharpen(0, 30.0);
-                        image.UnsharpMask(100, 10);
-                        Engine.DefaultPageSegMode = PageSegMode.SingleWord;
+                        //image.Scale(new Percentage(100 / (image.Width / 200.0)));
+                        
+                        // negate and then recolour grayish colours to pure white for best accuracy
+                        image.Negate(Channels.RGB);
                         // this is slow(? 50ms for all images) but idk how else i can do it
                         // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info this is disposable
                         using (IPixelCollection<byte> pixels = image.GetPixels())
@@ -140,10 +160,11 @@ namespace ArknightsTagMarker
                             foreach (IPixel<byte> pixel in pixels)
                             {
                                 IMagickColor<byte>? currentPixelColour = pixel.ToColor();
-                                if (currentPixelColour.R < 50 && currentPixelColour.G < 50 && currentPixelColour.B < 50)
+                                if (currentPixelColour.R > 130 && currentPixelColour.G > 130 && currentPixelColour.B > 130)
                                 {
-                                    // too dark(low) = bad, too bright(high) = bad, 40 seems perfect
-                                    pixel.SetChannel(0, 40);
+                                    pixel.SetChannel(0, 255);
+                                    pixel.SetChannel(1, 255);
+                                    pixel.SetChannel(2, 255);
                                 }
                             }
                         }
@@ -177,10 +198,12 @@ namespace ArknightsTagMarker
                 //Pix thresholdedPix = grayImage.BinarizeOtsuAdaptiveThreshold(16, 16, 0, 0, 1.0f);
 
                 Tesseract.Page page = Engine.Process(img);
-                string pageText = page.GetText();
+                // this new line is pure evil
+                string pageText = page.GetText().Replace("\n", "");
                 if (pageText != "")
                 {
                     string hold = text;
+                    //Console.WriteLine(pageText);
                     string temp = hold + pageText + (i < BoxCount - 1 ? "," : "");
                     text = temp;
                 }
@@ -195,7 +218,8 @@ namespace ArknightsTagMarker
         public void MarkTag()
         {
             // regex to reduce random noise characters that appear                               im sorry but WHY???        i dont care IT WORKS and .| doesnt
-            string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}|I| |", "").Replace(".", "");
+            // leaving this comment coz funny > string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}|I| |", "").Replace(".", "");
+            //string OCRTags = Regex.Replace(ExtractedText(), "[^a-zA-Z0-9,]", "");
 
             // for testing
             //string OCRTags = "Shift,DPS,FastRedeploy,AOE,Slow";
@@ -203,7 +227,9 @@ namespace ArknightsTagMarker
             //string OCRTags = "Melee,DPS,FastRedeploy,AOE,Slow";
             //string OCRTags = "DPS,DPRecovery,FastRedeploy,AOE,Slow";
             //string OCRTags = "Support,Supporter,FastRedeploy,AOE,Slow";
+            string OCRTags = "ps,ae,Melee,Support,Slow";
 
+            // only DPS tag is not really correct from what i see... making ToLower everything might fix it
             string[] tags = OCRTags.Split(",");
 
             TextBox4StarTags.Text = "4* Tags: ";
@@ -220,26 +246,18 @@ namespace ArknightsTagMarker
                         continue;
                     }
 
-                    // noise character removal at first index
-                    if (tags[i][0] == 'C' && tags[i][1] != 'r')
+                    // all tags start with higher case letters
+                    if (tags[i].Any(c => char.IsUpper(c)) && char.IsLower(tags[i][0]))
                     {
                         string newTagName = tags[i].Remove(0, 1);
                         tags[i] = newTagName;
                     }
+
+                    // im fucking stupid end my miserable life THIS IS WHY CASTER DIDNT WORK FFS
+                    //if (tags[i][0] == 'C' && tags[i][1] != 'r')
 
                     // this is one character??? H O W ??? sure i guess you learn something new everyday
                     //if (tags[i][0] == 'ﬁ')
-                    //{
-                    //    string newTagName = tags[i].Remove(0, 1);
-                    //    tags[i] = newTagName;
-                    //}
-
-                    // all tags start with higher case letters
-                    if (char.IsLower(tags[i][0]) || tags[i][0] == '|')
-                    {
-                        string newTagName = tags[i].Remove(0, 1);
-                        tags[i] = newTagName;
-                    }
                 }
                 catch { } // just so app doesnt crash and continues working in rare situations
             }
@@ -302,6 +320,7 @@ namespace ArknightsTagMarker
             }
         }
 
+        // one last small error here to fix
         public bool IsSame(string tag1, string tag2)
         {
             // return early if character difference is higher than 1
@@ -309,6 +328,10 @@ namespace ArknightsTagMarker
             {
                 return false;
             }
+
+            // sometimes there might be error where for example DPS is read as Dps, ps, DPs etc.
+            tag1 = tag1.ToLower();
+            tag2 = tag2.ToLower();
 
             int matchedChars = 0;
             int wrongCharCount = 0;
@@ -373,13 +396,13 @@ namespace ArknightsTagMarker
                 if (r == Rarity.Star4)
                 {
                     string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}, {tag3})";
+                    string temp = hold + $"({tag1}, {tag2}, {tag3}), ";
                     TextBox4StarTags.Text = temp;
                 }
                 else
                 {
                     string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}, {tag3})";
+                    string temp = hold + $"({tag1}, {tag2}, {tag3}), ";
                     TextBox5StarTags.Text = temp;
                 }
             }
@@ -464,12 +487,18 @@ namespace ArknightsTagMarker
                 return;
             }
 
-            float row1 = (float)(CapturedWindowRect.Top + (Height * 0.76));
-            float row2 = (float)(CapturedWindowRect.Top + (Height * 0.90));
+            // window that stalks tag box wont delete coz math is hard
+            //borderr.Height = Height * 0.05;
+            //borderr.Width = Width * 0.105;
+            //Canvas.SetLeft(borderr, (Width * 0.297) - 10); // 10 here is i guess padding in arknights
+            //Canvas.SetTop(borderr,  (Height * 0.505) + 10);
+
+            float row1 = (float)(CapturedWindowRect.Top + (Height * 0.788));
+            float row2 = (float)(CapturedWindowRect.Top + (Height * 0.930));
                                  
-            float col1 = (float)(CapturedWindowRect.Left + (Width * 0.42));
-            float col2 = (float)(CapturedWindowRect.Left + (Width * 0.61));
-            float col3 = (float)(CapturedWindowRect.Left + (Width * 0.80));
+            float col1 = (float)(CapturedWindowRect.Left + (Width * 0.45));
+            float col2 = (float)(CapturedWindowRect.Left + (Width * 0.64));
+            float col3 = (float)(CapturedWindowRect.Left + (Width * 0.83));
 
             TagBoxes = new Vector2[BoxCount]
             {

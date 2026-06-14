@@ -26,6 +26,7 @@
         </Grid.ColumnDefinitions>
 
         <Canvas Name="CanvasBox">
+            <!--<Border x:Name="borderr" BorderBrush="Red" BorderThickness="1" Width="50" Height="20"></Border>-->
             <Grid x:Name="TagsAvailable">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>

@@ -1,8 +1,9 @@
 # ArknightsTagMarker
 
 Up to date with https://www.reddit.com/r/arknights/comments/1m1xsrj/recruitment_tag_quick_reference_guide/
+, will update the application if i see somewhere that there is newer up to date version of this.
 
-Application that marks all 4* and 5* tag results from recruitment. Works for LDPlayer window (can change process name to something else only in source code, but i have no clue if it will work properly) and bigger window = better OCR accuracy (if window is too small it wont work at all).
+Application that marks all 4* and 5* tag results from recruitment. Works for LDPlayer emulator (you can change process name to something else only in source code for now, but i have no clue if it will work properly) and bigger window = better OCR accuracy, but small window size should still work fine.
 
 It creates window with 4* and 5* results next to the recruitment permit and a small button to easily close the app.
 

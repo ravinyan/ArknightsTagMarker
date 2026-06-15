@@ -1,0 +1,1 @@
+﻿Enter the Process name after the ":" (for example for LDPlayer it is called dnplayer.exe) that ArknightsTagMarker window should follow without .exe filename extension, just the name of it: dnplayer

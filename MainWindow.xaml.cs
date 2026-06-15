@@ -1,5 +1,6 @@
 ﻿using ImageMagick;
 using System.Diagnostics;
+using System.IO;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -76,7 +77,9 @@ namespace ArknightsTagMarker
             timer.Tick += Update;
 
             // what program window should follow here, if program to follow doesnt exist app WILL (intended) crash into oblivion
-            Process[] processes = Process.GetProcessesByName("dnplayer");
+            //
+            string processName = File.ReadAllText($"{AppContext.BaseDirectory}ProcessName.txt").Split(":")[2].Trim();
+            Process[] processes = Process.GetProcessesByName(processName);
             if (processes.Length == 0)
             {
                 MessageBox.Show("LDPlayer needs to be open for application to work.", "LDPlayer is not open");
@@ -183,7 +186,7 @@ namespace ArknightsTagMarker
 
             #if DEBUG
             w.Stop();
-            Console.WriteLine(w.ElapsedMilliseconds);
+            Console.WriteLine("Time Elapsed: " + w.ElapsedMilliseconds);
             w.Reset();
             #endif
         }
@@ -273,7 +276,7 @@ namespace ArknightsTagMarker
             Console.WriteLine("NOTE: tags can have 1 character error in them to work correctly.");
             for (int i = 0; i < tags.Length; i++)
             {
-                Console.WriteLine(tags[i]);
+                Console.WriteLine($"Tag{i + 1}: " + tags[i]);
             }
             #endif
 

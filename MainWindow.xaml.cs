@@ -1,12 +1,9 @@
 ﻿using ImageMagick;
 using System.Diagnostics;
-using System.Drawing;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Converters;
 using System.Windows.Threading;
 using Tesseract;
 
@@ -59,7 +56,7 @@ namespace ArknightsTagMarker
 
         List<((string, string, string), Rarity)> Tag3Combos = new List<((string, string, string), Rarity)>
         {
-           { (( "Caster","Slow", "DPS"), Rarity.Star5) },
+           { (( "Caster", "Slow", "DPS"), Rarity.Star5) },
            { (( "AOE", "DPS", "Guard"), Rarity.Star5) },
            { (( "AOE", "DPS", "Melee"), Rarity.Star5) },
         };
@@ -80,6 +77,11 @@ namespace ArknightsTagMarker
 
             // what program window should follow here, if program to follow doesnt exist app WILL (intended) crash into oblivion
             Process[] processes = Process.GetProcessesByName("dnplayer");
+            if (processes.Length == 0)
+            {
+                MessageBox.Show("LDPlayer needs to be open for application to work.", "LDPlayer is not open");
+                throw new Exception("LDPlayer needs to be open for application to work.");
+            }
             Ptr = processes[0].MainWindowHandle;
 
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
@@ -108,7 +110,7 @@ namespace ArknightsTagMarker
         Stopwatch w = new Stopwatch();
         private void Update(object? sender, EventArgs e)
         {
-            #if DEBUG   
+            #if DEBUG
             w.Start();
             #endif
 
@@ -130,13 +132,13 @@ namespace ArknightsTagMarker
                 //}
                 //g.Dispose();
                 //bitmap.Dispose();
-
+                
                 for (int i = 0; i < BoxCount; i++)
                 {
                     // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
-                    // after tweeking a lot of settings for hours this seems very good... slow but it works very well
                     MagickReadSettings.ExtractArea = new MagickGeometry(
-                        (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10, 
+                        // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
+                        (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
                         (uint)(Width * 0.15), (uint)(Height * 0.05));
                     
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
@@ -153,8 +155,8 @@ namespace ArknightsTagMarker
                         
                         // negate and then recolour grayish colours to pure white for best accuracy
                         image.Negate(Channels.RGB);
-                        // this is slow(? 50ms for all images) but idk how else i can do it
-                        // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info this is disposable
+
+                        // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info that this is disposable
                         using (IPixelCollection<byte> pixels = image.GetPixels())
                         {
                             foreach (IPixel<byte> pixel in pixels)
@@ -203,7 +205,6 @@ namespace ArknightsTagMarker
                 if (pageText != "")
                 {
                     string hold = text;
-                    //Console.WriteLine(pageText);
                     string temp = hold + pageText + (i < BoxCount - 1 ? "," : "");
                     text = temp;
                 }
@@ -219,15 +220,15 @@ namespace ArknightsTagMarker
         {
             // regex to reduce random noise characters that appear                               im sorry but WHY???        i dont care IT WORKS and .| doesnt
             // leaving this comment coz funny > string OCRTags = Regex.Replace(ExtractedText(), @$"\t|\n|\r|Q|\|;|-|{(char)45}|:|`|'|_|‘|{(char)8212}|I| |", "").Replace(".", "");
-            //string OCRTags = Regex.Replace(ExtractedText(), "[^a-zA-Z0-9,]", "");
+            string OCRTags = Regex.Replace(ExtractedText(), "[^a-zA-Z0-9,]", "");
 
             // for testing
-            //string OCRTags = "Shift,DPS,FastRedeploy,AOE,Slow";
+            //string OCRTags = "Defender,Caster,FastRedeploy,AOE,Slow";
             //string OCRTags = "Meleee,PS,FastERedeploy,ABE,Slaow";
             //string OCRTags = "Melee,DPS,FastRedeploy,AOE,Slow";
             //string OCRTags = "DPS,DPRecovery,FastRedeploy,AOE,Slow";
             //string OCRTags = "Support,Supporter,FastRedeploy,AOE,Slow";
-            string OCRTags = "ps,ae,Melee,Support,Slow";
+            //string OCRTags = "ps,ae,Melee,Support,Slow";
 
             // only DPS tag is not really correct from what i see... making ToLower everything might fix it
             string[] tags = OCRTags.Split(",");
@@ -247,6 +248,8 @@ namespace ArknightsTagMarker
                     }
 
                     // all tags start with higher case letters
+                    // this deletes lower case first character only if tag contains upper case character for some edge case
+                    // with tag errors like "ps" instead of "DPS", where "ps" will still work as a tag but just "s" wont
                     if (tags[i].Any(c => char.IsUpper(c)) && char.IsLower(tags[i][0]))
                     {
                         string newTagName = tags[i].Remove(0, 1);
@@ -255,7 +258,6 @@ namespace ArknightsTagMarker
 
                     // im fucking stupid end my miserable life THIS IS WHY CASTER DIDNT WORK FFS
                     //if (tags[i][0] == 'C' && tags[i][1] != 'r')
-
                     // this is one character??? H O W ??? sure i guess you learn something new everyday
                     //if (tags[i][0] == 'ﬁ')
                 }
@@ -263,6 +265,12 @@ namespace ArknightsTagMarker
             }
 
             #if DEBUG
+            // clear console coz i like it that way
+            Console.Clear();
+            // windows 11 is so dogshit that clearing console doesnt work and you need to also put this magic runes for it to work (https://stackoverflow.com/questions/75471607/console-clear-doesnt-clean-up-the-whole-console)
+            Console.WriteLine("\x1b[3J");
+
+            Console.WriteLine("NOTE: tags can have 1 character error in them to work correctly.");
             for (int i = 0; i < tags.Length; i++)
             {
                 Console.WriteLine(tags[i]);
@@ -342,7 +350,7 @@ namespace ArknightsTagMarker
             while (true)
             {
                 j = i + appendIndex;
-                if (i + 1 == tag1.Length && j + appendIndex + 1 < tag2.Length)
+                if (i + 1 == tag1.Length && j + appendIndex < tag2.Length)
                 {
                     appendIndex++;
                 }
@@ -375,7 +383,7 @@ namespace ArknightsTagMarker
                 }
 
                 // i have no clue how to better quit this while loop but it works so
-                if (i + 1 >= tag1.Length && j + appendIndex + 1 >= tag2.Length)
+                if (i + 1 >= tag1.Length && j + appendIndex >= tag2.Length)
                 {
                     break;
                 }
@@ -395,46 +403,47 @@ namespace ArknightsTagMarker
             {
                 if (r == Rarity.Star4)
                 {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}, {tag3}), ";
-                    TextBox4StarTags.Text = temp;
+                    AddTo(TextBox4StarTags, $"({tag1}, {tag2}, {tag3}), ");
                 }
                 else
                 {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}, {tag3}), ";
-                    TextBox5StarTags.Text = temp;
+                    AddTo(TextBox5StarTags, $"({tag1}, {tag2}, {tag3}), ");
+
                 }
             }
             else if (tag2 != "")
             {
                 if (r == Rarity.Star4)
                 {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}), ";
-                    TextBox4StarTags.Text = temp;
+                    AddTo(TextBox4StarTags, $"({tag1}, {tag2}), ");
+
                 }
                 else
                 {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tag1}, {tag2}), ";
-                    TextBox5StarTags.Text = temp;
+                    AddTo(TextBox5StarTags, $"({tag1}, {tag2}), ");
+
                 }
             }
             else if (tag1 != "")
             {
                 if (r == Rarity.Star4)
                 {
-                    string hold = TextBox4StarTags.Text;
-                    string temp = hold + $"({tag1}), ";
-                    TextBox4StarTags.Text = temp;
+                    AddTo(TextBox4StarTags, $"({tag1}), ");
                 }
                 else
                 {
-                    string hold = TextBox5StarTags.Text;
-                    string temp = hold + $"({tag1}), ";
-                    TextBox5StarTags.Text = temp;
+                    AddTo(TextBox5StarTags, $"({tag1}), ");
                 }
+            }
+
+            void AddTo(TextBlock textBlock, string tags)
+            {
+                if (textBlock.Text.Contains(tags))
+                {
+                    return;
+                }
+
+                textBlock.Text = textBlock.Text + tags;
             }
         }
 

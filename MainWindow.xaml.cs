@@ -46,7 +46,7 @@ namespace ArknightsTagMarker
             { "Survival", [("Defender", Rarity.Star5), ("Supporter", Rarity.Star5), ("Ranged", Rarity.Star4), ("Sniper", Rarity.Star4)] },
             { "Healing", [("Caster", Rarity.Star5), ("DPRecovery", Rarity.Star4), ("Supporter", Rarity.Star4), ("Vanguard", Rarity.Star4)] },
             { "Ranged", [("DPRecovery", Rarity.Star4), ("Vanguard", Rarity.Star4)] },
-            { "Crowd Control", [("DPRecovery", Rarity.Star5), ("FastRedeploy", Rarity.Star5), ("Melee", Rarity.Star5), ("Slow", Rarity.Star5), ("Specialist", Rarity.Star5), ("Summon", Rarity.Star5), ("Supporter", Rarity.Star5), ("Vanguard", Rarity.Star5)] },
+            { "CrowdControl", [("DPRecovery", Rarity.Star5), ("FastRedeploy", Rarity.Star5), ("Melee", Rarity.Star5), ("Slow", Rarity.Star5), ("Specialist", Rarity.Star5), ("Summon", Rarity.Star5), ("Supporter", Rarity.Star5), ("Vanguard", Rarity.Star5)] },
             { "Debuff", [("AOE", Rarity.Star5), ("FastRedeploy", Rarity.Star5), ("Melee", Rarity.Star5), ("Specialist", Rarity.Star5), ("Supporter", Rarity.Star5)] },
             { "Nuker", [("AOE", Rarity.Star5), ("Caster", Rarity.Star5), ("Ranged", Rarity.Star5), ("Sniper", Rarity.Star5)] },
             { "Shift", [("DPS", Rarity.Star5), ("Defender", Rarity.Star5), ("Defense", Rarity.Star5), ("Slow", Rarity.Star5)] },
@@ -113,9 +113,9 @@ namespace ArknightsTagMarker
         Stopwatch w = new Stopwatch();
         private void Update(object? sender, EventArgs e)
         {
-            #if DEBUG
+            //#if DEBUG
             w.Start();
-            #endif
+            //#endif
 
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
@@ -183,12 +183,13 @@ namespace ArknightsTagMarker
 
                 MarkTag();
             } catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
+            //              ^ this also makes finding bugs harder by myself but oh well
 
-            #if DEBUG
+            //#if DEBUG
             w.Stop();
             Console.WriteLine("Time Elapsed: " + w.ElapsedMilliseconds);
             w.Reset();
-            #endif
+            //#endif
         }
 
         public string ExtractedText()
@@ -267,7 +268,7 @@ namespace ArknightsTagMarker
                 catch { } // just so app doesnt crash and continues working in rare situations
             }
 
-            #if DEBUG
+            //#if DEBUG
             // clear console coz i like it that way
             Console.Clear();
             // windows 11 is so dogshit that clearing console doesnt work and you need to also put this magic runes for it to work (https://stackoverflow.com/questions/75471607/console-clear-doesnt-clean-up-the-whole-console)
@@ -278,7 +279,7 @@ namespace ArknightsTagMarker
             {
                 Console.WriteLine($"Tag{i + 1}: " + tags[i]);
             }
-            #endif
+            //#endif
 
             (string, Rarity)[] combos = null!;
             // so many loops!

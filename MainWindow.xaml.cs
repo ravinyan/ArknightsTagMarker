@@ -2,9 +2,11 @@
 using System.Diagnostics;
 using System.IO;
 using System.Numerics;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Threading;
 using Tesseract;
 
@@ -16,7 +18,16 @@ namespace ArknightsTagMarker
     public partial class MainWindow : Window
     {
         [System.Runtime.InteropServices.DllImport("user32.dll")]
+        public static extern bool GetClientRect(IntPtr hwnd, ref Rect rectangle);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern bool GetWindowRect(IntPtr hwnd, ref Rect rectangle);
+
+        public static double XDpi = 0;
+        public static double YDpi = 0;
+
+        Screen MonitorScreen;
+        bool IsBorderless = false;
 
         public struct Rect
         {
@@ -82,10 +93,18 @@ namespace ArknightsTagMarker
             Process[] processes = Process.GetProcessesByName(processName);
             if (processes.Length == 0)
             {
-                MessageBox.Show("LDPlayer needs to be open for application to work.", "LDPlayer is not open");
+                System.Windows.MessageBox.Show("LDPlayer needs to be open for application to work.", "LDPlayer is not open");
                 throw new Exception("LDPlayer needs to be open for application to work.");
             }
             Ptr = processes[0].MainWindowHandle;
+
+            PropertyInfo? dpiXProperty = typeof(SystemParameters).GetProperty("DpiX", BindingFlags.NonPublic | BindingFlags.Static);
+            PropertyInfo? dpiYProperty = typeof(SystemParameters).GetProperty("Dpi", BindingFlags.NonPublic | BindingFlags.Static);
+
+            XDpi = (int)dpiXProperty!.GetValue(null, null)! / 96.0;
+            YDpi = (int)dpiYProperty!.GetValue(null, null)! / 96.0;
+
+            MonitorScreen = Screen.FromHandle(new WindowInteropHelper(this).Handle);
 
             // sigh https://github.com/charlesw/tesseract/issues/636#event-1299319774
             TesseractEnviornment.CustomSearchPath = Environment.CurrentDirectory;
@@ -117,6 +136,16 @@ namespace ArknightsTagMarker
             w.Start();
             //#endif
 
+            GetClientRect(Ptr, ref CapturedWindowRect);
+            if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
+            {
+                IsBorderless = true;
+            }
+            else
+            {
+                IsBorderless = false;
+            }    
+
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
@@ -142,7 +171,7 @@ namespace ArknightsTagMarker
                     MagickReadSettings.ExtractArea = new MagickGeometry(
                         // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
                         (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
-                        (uint)(Width * 0.15), (uint)(Height * 0.05));
+                        (uint)(Width * 0.15), (uint)(Height * 0.06));
                     
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
@@ -467,18 +496,26 @@ namespace ArknightsTagMarker
 
         public void MoveWindow()
         {
-            Left = CapturedWindowRect.Left / 1.5;
-            Top = CapturedWindowRect.Top / 1.5;
+            Left = CapturedWindowRect.Left / XDpi;
+            Top = CapturedWindowRect.Top / YDpi;
 
-            Width = (CapturedWindowRect.Right - CapturedWindowRect.Left) / 1.5;
-            Height = (CapturedWindowRect.Bottom - CapturedWindowRect.Top) / 1.5;
+            Width = (CapturedWindowRect.Right - CapturedWindowRect.Left) / XDpi;
+            Height = (CapturedWindowRect.Bottom - CapturedWindowRect.Top) / YDpi;
 
             CanvasBox.Width = Width;
             CanvasBox.Height = Height;
-            Canvas.SetTop(TagsAvailable, Height / 1.33);
-            Canvas.SetLeft(TagsAvailable, Width / 2.75);
-            TagsAvailable.Width = Width / 3.7;
-            TagsAvailable.Height = Height / 6;
+
+            // PC client numbers
+            Canvas.SetTop(TagsAvailable, Height / 1.35);
+            Canvas.SetLeft(TagsAvailable, Width / 2.5);
+            TagsAvailable.Width = Width / 4;
+            TagsAvailable.Height = Height / 7;
+
+            // emulator numbers
+            //Canvas.SetTop(TagsAvailable, Height / 1.33);
+            //Canvas.SetLeft(TagsAvailable, Width / 2.75);
+            //TagsAvailable.Width = Width / 3.7;
+            //TagsAvailable.Height = Height / 6;
         }
 
         // this is high scale number tweaking operation
@@ -506,12 +543,25 @@ namespace ArknightsTagMarker
             //Canvas.SetLeft(borderr, (Width * 0.297) - 10); // 10 here is i guess padding in arknights
             //Canvas.SetTop(borderr,  (Height * 0.505) + 10);
 
-            float row1 = (float)(CapturedWindowRect.Top + (Height * 0.788));
-            float row2 = (float)(CapturedWindowRect.Top + (Height * 0.930));
-                                 
-            float col1 = (float)(CapturedWindowRect.Left + (Width * 0.45));
-            float col2 = (float)(CapturedWindowRect.Left + (Width * 0.64));
-            float col3 = (float)(CapturedWindowRect.Left + (Width * 0.83));
+            // PC client 
+            // wait i just guessed this why this with random out of ass numbers why does this even work
+            // AND WHY DOES THIS WORK PERFECTLY LMAO
+            int titleBarOffsetRow = IsBorderless == true ? 0 : 20 - (int)((MonitorScreen.Bounds.Height - Height * YDpi) * 0.01);
+            float row1 = (float)(CapturedWindowRect.Top + (Height * 0.760)) + titleBarOffsetRow;
+            float row2 = (float)(CapturedWindowRect.Top + (Height * 0.895)) + titleBarOffsetRow;
+                                                                 
+            float col1 = (float)(CapturedWindowRect.Left + (Width * 0.460));
+            float col2 = (float)(CapturedWindowRect.Left + (Width * 0.655));
+            float col3 = (float)(CapturedWindowRect.Left + (Width * 0.845));
+
+            // emulator numbers
+            //float row1 = (float)(CapturedWindowRect.Top + (Height * 0.788));
+            //float row2 = (float)(CapturedWindowRect.Top + (Height * 0.930));
+            //
+            //float col1 = (float)(CapturedWindowRect.Left + (Width * 0.450));
+            //float col2 = (float)(CapturedWindowRect.Left + (Width * 0.640));
+            //float col3 = (float)(CapturedWindowRect.Left + (Width * 0.830));
+
 
             TagBoxes = new Vector2[BoxCount]
             {
@@ -531,7 +581,7 @@ namespace ArknightsTagMarker
 
         private void CloseAppButtonClick(object sender, RoutedEventArgs e)
         {
-            Application.Current.Shutdown();
+            System.Windows.Application.Current.Shutdown();
         }
     }
 }

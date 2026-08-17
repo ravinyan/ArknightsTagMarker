@@ -17,6 +17,8 @@ namespace ArknightsTagMarker
     /// </summary>
     public partial class MainWindow : Window
     {
+        const bool IsPC = true;
+
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern bool GetClientRect(IntPtr hwnd, ref Rect rectangle);
 
@@ -129,23 +131,23 @@ namespace ArknightsTagMarker
             timer.Start();
         }
 
-        Stopwatch w = new Stopwatch();
         private void Update(object? sender, EventArgs e)
         {
-            //#if DEBUG
-            w.Start();
-            //#endif
+            ConsoleOutput(1);
 
-            GetClientRect(Ptr, ref CapturedWindowRect);
-            if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
+            if (IsPC)
             {
-                IsBorderless = true;
+                GetClientRect(Ptr, ref CapturedWindowRect);
+                if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
+                {
+                    IsBorderless = true;
+                }
+                else
+                {
+                    IsBorderless = false;
+                }
             }
-            else
-            {
-                IsBorderless = false;
-            }    
-
+  
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
@@ -154,6 +156,7 @@ namespace ArknightsTagMarker
 
             try
             {
+                /*
                 // old implementation but will leave it here for now coz i already wanted it 3 times to check something
                 //Bitmap bitmap = new Bitmap((int)(Width * 0.17), (int)(Height * 0.13));
                 //Graphics g = Graphics.FromImage(bitmap);
@@ -164,17 +167,19 @@ namespace ArknightsTagMarker
                 //}
                 //g.Dispose();
                 //bitmap.Dispose();
-                
+                */
+
                 for (int i = 0; i < BoxCount; i++)
                 {
                     // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
                     MagickReadSettings.ExtractArea = new MagickGeometry(
                         // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
                         (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
-                        (uint)(Width * 0.15), (uint)(Height * 0.06));
+                        (uint)(Width * 0.15), (uint)(Height * 0.05));
                     
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
+                        /*
                         // some options i used but werent really needed but i will leave this commented to know it exists
                         //image.Morphology(MorphologySettings);
                         //image.AdaptiveSharpen(0, 30.0);
@@ -184,7 +189,8 @@ namespace ArknightsTagMarker
                         // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
                         // 400 seems pretty good there with all other configurations i have set up
                         //image.Scale(new Percentage(100 / (image.Width / 200.0)));
-                        
+                        */
+
                         // negate and then recolour grayish colours to pure white for best accuracy
                         image.Negate(Channels.RGB);
 
@@ -214,11 +220,7 @@ namespace ArknightsTagMarker
             } catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
             //              ^ this also makes finding bugs harder by myself but oh well
 
-            //#if DEBUG
-            w.Stop();
-            Console.WriteLine("Time Elapsed: " + w.ElapsedMilliseconds);
-            w.Reset();
-            //#endif
+            ConsoleOutput(2);
         }
 
         public string ExtractedText()
@@ -297,18 +299,7 @@ namespace ArknightsTagMarker
                 catch { } // just so app doesnt crash and continues working in rare situations
             }
 
-            //#if DEBUG
-            // clear console coz i like it that way
-            Console.Clear();
-            // windows 11 is so dogshit that clearing console doesnt work and you need to also put this magic runes for it to work (https://stackoverflow.com/questions/75471607/console-clear-doesnt-clean-up-the-whole-console)
-            Console.WriteLine("\x1b[3J");
-
-            Console.WriteLine("NOTE: tags can have 1 character error in them to work correctly.");
-            for (int i = 0; i < tags.Length; i++)
-            {
-                Console.WriteLine($"Tag{i + 1}: " + tags[i]);
-            }
-            //#endif
+            ConsoleOutput(3, tags);
 
             (string, Rarity)[] combos = null!;
             // so many loops!
@@ -482,15 +473,31 @@ namespace ArknightsTagMarker
 
         public void ResizeResultBoxFontSize()
         {
-            if (Width < 700 && Height < 400)
+            if (IsPC == true)
             {
-                TextBox4StarTags.FontSize = 7;
-                TextBox5StarTags.FontSize = 7;
+                if (Width < 1000 && Height < 600)
+                {
+                    TextBox4StarTags.FontSize = 7;
+                    TextBox5StarTags.FontSize = 7;
+                }
+                else
+                {
+                    TextBox4StarTags.FontSize = 11;
+                    TextBox5StarTags.FontSize = 11;
+                }
             }
             else
             {
-                TextBox4StarTags.FontSize = 11;
-                TextBox5StarTags.FontSize = 11;
+                if (Width < 700 && Height < 400)
+                {
+                    TextBox4StarTags.FontSize = 7;
+                    TextBox5StarTags.FontSize = 7;
+                }
+                else
+                {
+                    TextBox4StarTags.FontSize = 11;
+                    TextBox5StarTags.FontSize = 11;
+                }
             }
         }
 
@@ -505,17 +512,7 @@ namespace ArknightsTagMarker
             CanvasBox.Width = Width;
             CanvasBox.Height = Height;
 
-            // PC client numbers
-            Canvas.SetTop(TagsAvailable, Height / 1.35);
-            Canvas.SetLeft(TagsAvailable, Width / 2.5);
-            TagsAvailable.Width = Width / 4;
-            TagsAvailable.Height = Height / 7;
-
-            // emulator numbers
-            //Canvas.SetTop(TagsAvailable, Height / 1.33);
-            //Canvas.SetLeft(TagsAvailable, Width / 2.75);
-            //TagsAvailable.Width = Width / 3.7;
-            //TagsAvailable.Height = Height / 6;
+            ChangeOutputBoxPosition();
         }
 
         // this is high scale number tweaking operation
@@ -537,40 +534,15 @@ namespace ArknightsTagMarker
                 return;
             }
 
+            /*
             // window that stalks tag box wont delete coz math is hard
             //borderr.Height = Height * 0.05;
             //borderr.Width = Width * 0.105;
             //Canvas.SetLeft(borderr, (Width * 0.297) - 10); // 10 here is i guess padding in arknights
             //Canvas.SetTop(borderr,  (Height * 0.505) + 10);
+            */
 
-            // PC client 
-            // wait i just guessed this why this with random out of ass numbers why does this even work
-            // AND WHY DOES THIS WORK PERFECTLY LMAO
-            int titleBarOffsetRow = IsBorderless == true ? 0 : 20 - (int)((MonitorScreen.Bounds.Height - Height * YDpi) * 0.01);
-            float row1 = (float)(CapturedWindowRect.Top + (Height * 0.760)) + titleBarOffsetRow;
-            float row2 = (float)(CapturedWindowRect.Top + (Height * 0.895)) + titleBarOffsetRow;
-                                                                 
-            float col1 = (float)(CapturedWindowRect.Left + (Width * 0.460));
-            float col2 = (float)(CapturedWindowRect.Left + (Width * 0.655));
-            float col3 = (float)(CapturedWindowRect.Left + (Width * 0.845));
-
-            // emulator numbers
-            //float row1 = (float)(CapturedWindowRect.Top + (Height * 0.788));
-            //float row2 = (float)(CapturedWindowRect.Top + (Height * 0.930));
-            //
-            //float col1 = (float)(CapturedWindowRect.Left + (Width * 0.450));
-            //float col2 = (float)(CapturedWindowRect.Left + (Width * 0.640));
-            //float col3 = (float)(CapturedWindowRect.Left + (Width * 0.830));
-
-
-            TagBoxes = new Vector2[BoxCount]
-            {
-                new Vector2(col1, row1),
-                new Vector2(col2, row1),
-                new Vector2(col3, row1),
-                new Vector2(col1, row2),
-                new Vector2(col2, row2),
-            };
+            GetBoxesPositioning();
         }
 
         public enum Rarity
@@ -582,6 +554,102 @@ namespace ArknightsTagMarker
         private void CloseAppButtonClick(object sender, RoutedEventArgs e)
         {
             System.Windows.Application.Current.Shutdown();
+        }
+
+        Stopwatch w = new Stopwatch();
+        /// <summary>
+        /// 1 = start timer, 2 = reset timer + show timer, 3 = show tags + clear console 
+        /// </summary>
+        /// <param name="part"></param>
+        public void ConsoleOutput(byte part, string[] tags = null!)
+        {
+            try
+            {// this will cause exception and return if console is not open coz i dont want to change
+             // code here + text in .csproj file when i want to enable/disable console output
+                var a = Console.CursorSize;
+            } catch { return; }
+
+            switch (part)
+            {
+                case 1:
+                    w.Start();
+                    break;
+                case 2:
+                    w.Stop();
+                    Console.WriteLine("Time Elapsed: " + w.ElapsedMilliseconds);
+                    w.Reset();
+                    break;
+                case 3:
+                    // clear console coz i like it that way
+                    Console.Clear();
+                    // windows 11 is so dogshit that clearing console doesnt work and you need to also put this magic runes for it to work (https://stackoverflow.com/questions/75471607/console-clear-doesnt-clean-up-the-whole-console)
+                    Console.WriteLine("\x1b[3J");
+                    Console.WriteLine("NOTE: tags can have 1 character error in them to work correctly.");
+                    for (int i = 0; i < tags.Length; i++)
+                    {
+                        Console.WriteLine($"Tag{i + 1}: " + tags[i]);
+                    }
+                    break;
+                default:
+                    throw new Exception("buh exception for being stupid");
+            }
+        }
+
+        public void GetBoxesPositioning()
+        {
+            float row1;
+            float row2;
+            float col1;
+            float col2;
+            float col3;
+            if (IsPC == true) // PC client 
+            {
+                // wait i just guessed this why this with random out of ass numbers why does this even work
+                // AND WHY DOES THIS WORK PERFECTLY LMAO < it doesnt and im too lazy to make this app work for all resolutions rip
+                double titleBarOffsetRow = IsBorderless == true ? -8 : 20 - ((MonitorScreen.Bounds.Height - Height * YDpi) * 0.01);
+                row1 = (float)(CapturedWindowRect.Top + (Height * 0.765) + titleBarOffsetRow);
+                row2 = (float)(CapturedWindowRect.Top + (Height * 0.905) + titleBarOffsetRow);
+
+                col1 = (float)(CapturedWindowRect.Left + (Width * 0.460));
+                col2 = (float)(CapturedWindowRect.Left + (Width * 0.655));
+                col3 = (float)(CapturedWindowRect.Left + (Width * 0.845));
+            }
+            else // emulator numbers
+            {
+                row1 = (float)(CapturedWindowRect.Top + (Height * 0.788));
+                row2 = (float)(CapturedWindowRect.Top + (Height * 0.930));
+                
+                col1 = (float)(CapturedWindowRect.Left + (Width * 0.450));
+                col2 = (float)(CapturedWindowRect.Left + (Width * 0.640));
+                col3 = (float)(CapturedWindowRect.Left + (Width * 0.830));
+            }
+
+            TagBoxes = new Vector2[BoxCount]
+            {
+                new Vector2(col1, row1),
+                new Vector2(col2, row1),
+                new Vector2(col3, row1),
+                new Vector2(col1, row2),
+                new Vector2(col2, row2),
+            };
+        }
+
+        public void ChangeOutputBoxPosition()
+        {
+            if (IsPC == true) // PC client numbers
+            {
+                Canvas.SetTop(TagsAvailable, Height / 1.35);
+                Canvas.SetLeft(TagsAvailable, Width / 2.5);
+                TagsAvailable.Width  = Width  / 4;
+                TagsAvailable.Height = Height / 7;
+            }
+            else // emulator numbers
+            {
+                Canvas.SetTop(TagsAvailable, Height / 1.33);
+                Canvas.SetLeft(TagsAvailable, Width / 2.75);
+                TagsAvailable.Width  = Width  / 3.7;
+                TagsAvailable.Height = Height / 6;
+            }
         }
     }
 }

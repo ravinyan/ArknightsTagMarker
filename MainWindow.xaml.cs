@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Tesseract;
 
@@ -27,6 +28,9 @@ namespace ArknightsTagMarker
 
         public static double XDpi = 0;
         public static double YDpi = 0;
+
+        int PrevWidth  = 0;
+        int PrevHeight = 0;
 
         Screen MonitorScreen;
         bool IsBorderless = false;
@@ -131,13 +135,189 @@ namespace ArknightsTagMarker
             timer.Start();
         }
 
-        private void Update(object? sender, EventArgs e)
+        unsafe private void Update(object? sender, EventArgs e)
         {
             ConsoleOutput(1);
 
             if (IsPC)
             {
                 GetClientRect(Ptr, ref CapturedWindowRect);
+
+                if (PrevHeight != CapturedWindowRect.Bottom || PrevWidth != CapturedWindowRect.Right)
+                {
+                    PrevHeight = CapturedWindowRect.Bottom;
+                    PrevWidth = CapturedWindowRect.Right;
+
+                    GetWindowRect(Ptr, ref CapturedWindowRect);
+
+                    MagickReadSettings.ExtractArea = new MagickGeometry(
+                    CapturedWindowRect.Left, CapturedWindowRect.Top,
+                    (uint)(PrevWidth), (uint)(PrevHeight));
+
+                    using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                    {
+                        image.Write($"HELPPPP.tiff", MagickFormat.Tiff);
+                    }
+
+                    BitmapSource sourceImage = new BitmapImage(new Uri($"{AppContext.BaseDirectory}\\HELPPPP.tiff"));
+                    WriteableBitmap writableImage = new WriteableBitmap(sourceImage);
+                    
+                    IntPtr pBackBuffer = writableImage.BackBuffer;
+                    byte* pBuff = (byte*)pBackBuffer.ToPointer();
+
+                    int backBufferStride = writableImage.BackBufferStride;
+
+                    int pixelX;
+                    int pixelY;
+                    int pixelIndex;
+
+                    byte a;
+                    byte b;
+                    byte g;
+                    byte r;
+
+                    int x = writableImage.PixelWidth / 2;
+                    int y = 0;
+                    Console.WriteLine("AAAAAAAAAAAAAAAAA");
+
+                    // to save tag box pos?
+                    int boxIndex    = 0;
+                    int bottomLeft  = 0;
+                    int bottomRight = 0;
+                    int topLeft     = 0;
+                    int topRight    = 0;
+
+                    List<(int, Rect)> boxes = new List<(int, Rect)>();
+
+                    // this feels like fun puzzle game but head hurts too much to figure anything today
+                    // goal is:
+                    // > go from bottom to top (from middle of the screenshot)
+                    // > the tag boxes background RGB is 49,49,49 so need to stop here
+                    // > go to the bottom left and then to the top right
+                    // > save width, height and XY positions for the box and then...
+                    // > i think it needs to be hard coded? go to left > top > right > right > stop
+                    // biggest problem? my brain turns off looking at numbers...
+
+                    // start from bottom, from half of the width
+                    for (y = writableImage.PixelHeight - 3; y > 0; y--)
+                    {
+                        pixelX = 4 * x;
+                        pixelY = y * backBufferStride;
+                        pixelIndex = pixelX + pixelY;
+
+                        b = pBuff[pixelIndex];
+                        g = pBuff[pixelIndex + 1];
+                        r = pBuff[pixelIndex + 2];
+
+                        if (b == 49 && g == 49 && r == 49)
+                        {
+                            y -= 30;
+                            pixelY = y * backBufferStride;
+                            // go to left
+                            while (b == 49 && g == 49 && r == 49)
+                            {
+                                x++;
+                                pixelX = 4 * x;
+                                pixelIndex = pixelX + pixelY;
+
+                                b = pBuff[pixelIndex];
+                                g = pBuff[pixelIndex + 1];
+                                r = pBuff[pixelIndex + 2];
+
+                                pBuff[pixelIndex + 0] = (byte)(0);
+                                pBuff[pixelIndex + 1] = (byte)(0);
+                                pBuff[pixelIndex + 2] = (byte)(255);
+                            }
+
+                            x--;
+                            pixelX = 4 * x;
+                            pixelIndex = pixelX + pixelY;
+                            b = pBuff[pixelIndex];
+                            g = pBuff[pixelIndex + 1];
+                            r = pBuff[pixelIndex + 2];
+
+                            while (r == 255 || (b == 49 && g == 49 && r == 49))
+                            {
+                                y++;
+                                pixelY = y * backBufferStride;
+                                pixelIndex = pixelX + pixelY;
+
+                                b = pBuff[pixelIndex];
+                                g = pBuff[pixelIndex + 1];
+                                r = pBuff[pixelIndex + 2];
+
+                                pBuff[pixelIndex + 0] = (byte)(0);
+                                pBuff[pixelIndex + 1] = (byte)(0);
+                                pBuff[pixelIndex + 2] = (byte)(255);
+                            }
+
+                            y--;
+                            pixelY = y * backBufferStride;
+                            pixelIndex = pixelX + pixelY;
+                            b = pBuff[pixelIndex];
+                            g = pBuff[pixelIndex + 1];
+                            r = pBuff[pixelIndex + 2];
+
+
+                            break;
+                        }
+
+
+                        
+                        if (b == 49 && g == 49 && r == 49)
+                        {
+
+                            //while (b == 49 && g == 49 && r == 49)
+                            //{
+                            //}
+
+                            // 4 walls
+                            //for (int i = 0; i < 4; i++)
+                            //{
+                            //    // find bottom left corner and go from there
+                            //    while (b == 49 && g == 49 && r == 49)
+                            //    {
+                            //        x++;
+                            //        pixelIndex = (4 * x) + pixelY;
+                            //        b = pBuff[pixelIndex];
+                            //        g = pBuff[pixelIndex + 1];
+                            //        r = pBuff[pixelIndex + 2];
+                            //    }  
+                            //}
+
+                        }
+
+                        Console.WriteLine(r + " " + g + " " + b);
+                        //do
+                        //{
+                        //    y++;
+                        //    pixelY = y * backBufferStride;
+                        //    pixelIndex = pixelX + pixelY;
+                        //
+                        //    pBuff[pixelIndex + 0] = (byte)(0);
+                        //    pBuff[pixelIndex + 1] = (byte)(0);
+                        //    pBuff[pixelIndex + 2] = (byte)(255);
+                        //    if (b != 49 || g != 49 || r != 49)
+                        //    {
+                        //        x--;
+                        //    }
+                        //}
+                        //while (b == 49 && g == 49 && r == 49);
+
+
+                        //pBuff[pixelIndex + 0] = (byte)(0);
+                        //pBuff[pixelIndex + 1] = (byte)(0);
+                        //pBuff[pixelIndex + 2] = (byte)(255);
+                    }
+
+                    using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
+                    {
+                        PngBitmapEncoder encoder5 = new PngBitmapEncoder();
+                        encoder5.Frames.Add(BitmapFrame.Create(writableImage));
+                        encoder5.Save(stream5);
+                    }
+                }
+
                 if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
                 {
                     IsBorderless = true;
@@ -147,7 +327,7 @@ namespace ArknightsTagMarker
                     IsBorderless = false;
                 }
             }
-  
+
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
@@ -176,7 +356,7 @@ namespace ArknightsTagMarker
                         // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
                         (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
                         (uint)(Width * 0.15), (uint)(Height * 0.05));
-                    
+
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
                         /*
@@ -563,6 +743,7 @@ namespace ArknightsTagMarker
         /// <param name="part"></param>
         public void ConsoleOutput(byte part, string[] tags = null!)
         {
+            return;
             try
             {// this will cause exception and return if console is not open coz i dont want to change
              // code here + text in .csproj file when i want to enable/disable console output

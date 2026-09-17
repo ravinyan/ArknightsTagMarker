@@ -135,6 +135,135 @@ namespace ArknightsTagMarker
             timer.Start();
         }
 
+        unsafe (int, int, int, int, int, int) GetTagBoxSizeAndCords(byte b, byte g, byte r, int pixelX, int pixelY, int pixelIndex, int x, int y, int backBufferStride, byte* pBuff)
+        {
+            int boxWidth  = 0;
+            int boxHeight = 0;
+            int sideGap   = 0;
+            int topGap    = 0;
+
+            int tempX = x;
+            // i cant do one half *2 coz image cant be centered (multiple user end variables change that)
+            // slide to the right!
+            while (b == 49 && g == 49 && r == 49)
+            {
+                x++;
+                pixelX = 4 * x;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                boxWidth++;
+                pBuff[pixelIndex + 0] = (byte)(0);
+                pBuff[pixelIndex + 1] = (byte)(0);
+                pBuff[pixelIndex + 2] = (byte)(255);
+            }
+
+            // reset all values
+            x = tempX;
+            pixelX = 4 * x;
+            pixelIndex = pixelX + pixelY;
+            b = pBuff[pixelIndex];
+            g = pBuff[pixelIndex + 1];
+            r = pBuff[pixelIndex + 2];
+            // slide to the left!
+            while (b == 49 && g == 49 && r == 49)
+            {
+                x--;
+                pixelX = 4 * x;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                boxWidth++;
+
+                pBuff[pixelIndex + 0] = (byte)(0);
+                pBuff[pixelIndex + 1] = (byte)(0);
+                pBuff[pixelIndex + 2] = (byte)(255);
+            }
+
+            // reset stuff again
+            x++;
+            y--;
+            pixelX = 4 * x;
+            pixelY = y * backBufferStride;
+            pixelIndex = pixelX + pixelY;
+            b = pBuff[pixelIndex];
+            g = pBuff[pixelIndex + 1];
+            r = pBuff[pixelIndex + 2];
+
+            // slide... up?
+            int tempY = y;
+            while (b == 49 && g == 49 && r == 49)
+            {
+                pixelY = y * backBufferStride;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                boxHeight++;
+                pBuff[pixelIndex + 0] = (byte)(0);
+                pBuff[pixelIndex + 1] = (byte)(0);
+                pBuff[pixelIndex + 2] = (byte)(255);
+
+                y--;
+            }
+
+            // save this early since getting data from gaps will change these values
+            int boxX = x;
+            int boxY = y;
+
+            // well... since im at top left side... why also not get size of gaps between tags? lol
+            tempY = y + 1;
+            while (b != 49 || g != 49 || r != 49)
+            {
+                pixelY = y * backBufferStride;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                topGap++;
+                pBuff[pixelIndex + 0] = (byte)(0);
+                pBuff[pixelIndex + 1] = (byte)(0);
+                pBuff[pixelIndex + 2] = (byte)(255);
+
+                y--;
+            }
+
+            y = tempY + 1;
+            pixelY = y * backBufferStride;
+            pixelIndex = pixelX + pixelY;
+            b = pBuff[pixelIndex];
+            g = pBuff[pixelIndex + 1];
+            r = pBuff[pixelIndex + 2];
+
+            while (b != 49 || g != 49 || r != 49)
+            {
+                x--;
+                pixelX = 4 * x;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                sideGap++;
+                pBuff[pixelIndex + 0] = (byte)(0);
+                pBuff[pixelIndex + 1] = (byte)(0);
+                pBuff[pixelIndex + 2] = (byte)(255);
+            }
+
+            return (boxWidth, boxHeight, boxX, boxY, sideGap, topGap);
+        }
+
         unsafe private void Update(object? sender, EventArgs e)
         {
             ConsoleOutput(1);
@@ -171,7 +300,6 @@ namespace ArknightsTagMarker
                     int pixelY;
                     int pixelIndex;
 
-                    byte a;
                     byte b;
                     byte g;
                     byte r;
@@ -180,23 +308,15 @@ namespace ArknightsTagMarker
                     int y = 0;
                     Console.WriteLine("AAAAAAAAAAAAAAAAA");
 
-                    // to save tag box pos?
-                    int boxIndex    = 0;
-                    int bottomLeft  = 0;
-                    int bottomRight = 0;
-                    int topLeft     = 0;
-                    int topRight    = 0;
+                    // how about...
+                    // 3 pointers and for loop that executes twice
+                    // first loop ignores 3rd pointer
 
-                    List<(int, Rect)> boxes = new List<(int, Rect)>();
-
-                    // this feels like fun puzzle game but head hurts too much to figure anything today
-                    // goal is:
-                    // > go from bottom to top (from middle of the screenshot)
-                    // > the tag boxes background RGB is 49,49,49 so need to stop here
-                    // > go to the bottom left and then to the top right
-                    // > save width, height and XY positions for the box and then...
-                    // > i think it needs to be hard coded? go to left > top > right > right > stop
-                    // biggest problem? my brain turns off looking at numbers...
+                    Vector2 left   = new Vector2(0, 0);
+                    Vector2 middle = new Vector2(0, 0);
+                    Vector2 right  = new Vector2(0, 0);
+                    
+                    Dictionary<int, Rect> boxes = new Dictionary<int, Rect>();
 
                     // start from bottom, from half of the width
                     for (y = writableImage.PixelHeight - 3; y > 0; y--)
@@ -211,103 +331,205 @@ namespace ArknightsTagMarker
 
                         if (b == 49 && g == 49 && r == 49)
                         {
-                            y -= 30;
-                            pixelY = y * backBufferStride;
-                            // go to left
-                            while (b == 49 && g == 49 && r == 49)
+                            // get widht and height
+                            // there is small problem... there are particles flying all the time that can possibly 
+                            // mess everything up
+                            (int boxWidth, int boxHeight, int X, int Y, int sideGap, int topGap) 
+                            = GetTagBoxSizeAndCords(b, g, r, pixelX, pixelY, pixelIndex, x, y, backBufferStride, pBuff);
+
+                            // for now scuffed way
+                            for (int i = 0; i < BoxCount; i++)
                             {
-                                x++;
-                                pixelX = 4 * x;
-                                pixelIndex = pixelX + pixelY;
+                                switch (i)
+                                {
+                                    case 0: // bottom middle
+                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
+                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);                                      
+                                        break;
+                                    case 1: // bottom left
+                                        X = X - sideGap - boxWidth + 1;
+                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
+                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
+                                        break;
+                                    case 2: // top left
+                                        Y = Y - topGap - boxHeight + 1;
+                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
+                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
+                                        break;
+                                    case 3: // top middle
+                                        X = X + sideGap + boxWidth - 1;
+                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
+                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
+                                        break;
+                                    case 4: // top right
+                                        X = X + sideGap + boxWidth - 1;
+                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
+                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
+                                        break;
+                                }
 
-                                b = pBuff[pixelIndex];
-                                g = pBuff[pixelIndex + 1];
-                                r = pBuff[pixelIndex + 2];
+                                using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                                {
+                                    image.Write($"ball{i}.tiff", MagickFormat.Tiff);
+                                }
+                            }
+                            MagickReadSettings.ExtractArea = new MagickGeometry(
+                            CapturedWindowRect.Left + X, CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
 
-                                pBuff[pixelIndex + 0] = (byte)(0);
-                                pBuff[pixelIndex + 1] = (byte)(0);
-                                pBuff[pixelIndex + 2] = (byte)(255);
+                            // PERFECTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                            using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                            {
+                                image.Write($"ball.tiff", MagickFormat.Tiff);
                             }
 
-                            x--;
-                            pixelX = 4 * x;
-                            pixelIndex = pixelX + pixelY;
-                            b = pBuff[pixelIndex];
-                            g = pBuff[pixelIndex + 1];
-                            r = pBuff[pixelIndex + 2];
+                            // small idea: calculate only one box X and Y position
+                            // and calculate size od the gaps between tags, then i can just math it out for all positions
+                            // im genius... how do i do that nicely... im dumb
 
-                            while (r == 255 || (b == 49 && g == 49 && r == 49))
+                            // here will get X and Y pos of top left corner (since WPF defaults 0,0 pos of objects as left corner
+                            // then use all values for tag boxes dimensions and positions
+                            // then im done?
+
+                            break;
+                            int xPos = 0;
+                            int yPos = 0;
+                            for (int row = 0; row < 2; row++)
                             {
-                                y++;
-                                pixelY = y * backBufferStride;
-                                pixelIndex = pixelX + pixelY;
+                                // 3 columns
+                                for (int col = 0; col < 3; col++)
+                                {
+                                    if (row == 0 && col == 2)
+                                    {// skipping empty tag space in first row (looking for tags from the bottom of the game window)
+                                        continue;
+                                    }
 
-                                b = pBuff[pixelIndex];
-                                g = pBuff[pixelIndex + 1];
-                                r = pBuff[pixelIndex + 2];
+                                    if (col == 0)
+                                    {
+                                        xPos = x - boxWidth;
+                                    }
+                                    else if (col == 2)
+                                    {
+                                        xPos = x + boxWidth;
+                                    }
+                                    else
+                                    {
+                                        xPos = x;
+                                    }
 
-                                pBuff[pixelIndex + 0] = (byte)(0);
-                                pBuff[pixelIndex + 1] = (byte)(0);
-                                pBuff[pixelIndex + 2] = (byte)(255);
+                 
+
+                                    pixelX = 4 * xPos;
+                                    yPos = y;
+                                    pixelIndex = pixelX + pixelY;
+                                    b = pBuff[pixelIndex];
+                                    g = pBuff[pixelIndex + 1];
+                                    r = pBuff[pixelIndex + 2];
+                                    pBuff[pixelIndex + 0] = (byte)(255);
+                                    pBuff[pixelIndex + 1] = (byte)(234);
+                                    pBuff[pixelIndex + 2] = (byte)(0);
+                                    if (b != 49 && g != 49 && r != 49)
+                                    {
+                                        continue;
+                                    }
+
+                                    // go to left
+                                    while (b == 49 && g == 49 && r == 49)
+                                    {
+                                        xPos++;
+                                        pixelX = 4 * xPos;
+                                        pixelIndex = pixelX + pixelY;
+
+                                        b = pBuff[pixelIndex];
+                                        g = pBuff[pixelIndex + 1];
+                                        r = pBuff[pixelIndex + 2];
+
+                                        pBuff[pixelIndex + 0] = (byte)(0);
+                                        pBuff[pixelIndex + 1] = (byte)(0);
+                                        pBuff[pixelIndex + 2] = (byte)(255);
+                                    }
+
+                                    xPos--;
+                                    pixelX = 4 * x;
+                                    pixelIndex = pixelX + pixelY;
+                                    b = pBuff[pixelIndex];
+                                    g = pBuff[pixelIndex + 1];
+                                    r = pBuff[pixelIndex + 2];
+
+                                    while (r == 255 || (b == 49 && g == 49 && r == 49))
+                                    {
+                                        yPos++;
+                                        pixelY = yPos * backBufferStride;
+                                        pixelIndex = pixelX + pixelY;
+
+                                        b = pBuff[pixelIndex];
+                                        g = pBuff[pixelIndex + 1];
+                                        r = pBuff[pixelIndex + 2];
+
+                                        pBuff[pixelIndex + 0] = (byte)(0);
+                                        pBuff[pixelIndex + 1] = (byte)(0);
+                                        pBuff[pixelIndex + 2] = (byte)(255);
+                                    }
+
+                                    yPos--;
+                                    pixelY = yPos * backBufferStride;
+                                    pixelIndex = pixelX + pixelY;
+                                    b = pBuff[pixelIndex];
+                                    g = pBuff[pixelIndex + 1];
+                                    r = pBuff[pixelIndex + 2];
+                                }
                             }
 
-                            y--;
-                            pixelY = y * backBufferStride;
-                            pixelIndex = pixelX + pixelY;
-                            b = pBuff[pixelIndex];
-                            g = pBuff[pixelIndex + 1];
-                            r = pBuff[pixelIndex + 2];
+
+                            //y -= 30;
+                            //pixelY = y * backBufferStride;
+                            //// go to left
+                            //while (b == 49 && g == 49 && r == 49)
+                            //{
+                            //    x++;
+                            //    pixelX = 4 * x;
+                            //    pixelIndex = pixelX + pixelY;
+                            //
+                            //    b = pBuff[pixelIndex];
+                            //    g = pBuff[pixelIndex + 1];
+                            //    r = pBuff[pixelIndex + 2];
+                            //
+                            //    pBuff[pixelIndex + 0] = (byte)(0);
+                            //    pBuff[pixelIndex + 1] = (byte)(0);
+                            //    pBuff[pixelIndex + 2] = (byte)(255);
+                            //}
+                            //
+                            //x--;
+                            //pixelX = 4 * x;
+                            //pixelIndex = pixelX + pixelY;
+                            //b = pBuff[pixelIndex];
+                            //g = pBuff[pixelIndex + 1];
+                            //r = pBuff[pixelIndex + 2];
+                            //
+                            //while (r == 255 || (b == 49 && g == 49 && r == 49))
+                            //{
+                            //    y++;
+                            //    pixelY = y * backBufferStride;
+                            //    pixelIndex = pixelX + pixelY;
+                            //
+                            //    b = pBuff[pixelIndex];
+                            //    g = pBuff[pixelIndex + 1];
+                            //    r = pBuff[pixelIndex + 2];
+                            //
+                            //    pBuff[pixelIndex + 0] = (byte)(0);
+                            //    pBuff[pixelIndex + 1] = (byte)(0);
+                            //    pBuff[pixelIndex + 2] = (byte)(255);
+                            //}
+                            //
+                            //y--;
+                            //pixelY = y * backBufferStride;
+                            //pixelIndex = pixelX + pixelY;
+                            //b = pBuff[pixelIndex];
+                            //g = pBuff[pixelIndex + 1];
+                            //r = pBuff[pixelIndex + 2];
 
 
                             break;
                         }
-
-
-                        
-                        if (b == 49 && g == 49 && r == 49)
-                        {
-
-                            //while (b == 49 && g == 49 && r == 49)
-                            //{
-                            //}
-
-                            // 4 walls
-                            //for (int i = 0; i < 4; i++)
-                            //{
-                            //    // find bottom left corner and go from there
-                            //    while (b == 49 && g == 49 && r == 49)
-                            //    {
-                            //        x++;
-                            //        pixelIndex = (4 * x) + pixelY;
-                            //        b = pBuff[pixelIndex];
-                            //        g = pBuff[pixelIndex + 1];
-                            //        r = pBuff[pixelIndex + 2];
-                            //    }  
-                            //}
-
-                        }
-
-                        Console.WriteLine(r + " " + g + " " + b);
-                        //do
-                        //{
-                        //    y++;
-                        //    pixelY = y * backBufferStride;
-                        //    pixelIndex = pixelX + pixelY;
-                        //
-                        //    pBuff[pixelIndex + 0] = (byte)(0);
-                        //    pBuff[pixelIndex + 1] = (byte)(0);
-                        //    pBuff[pixelIndex + 2] = (byte)(255);
-                        //    if (b != 49 || g != 49 || r != 49)
-                        //    {
-                        //        x--;
-                        //    }
-                        //}
-                        //while (b == 49 && g == 49 && r == 49);
-
-
-                        //pBuff[pixelIndex + 0] = (byte)(0);
-                        //pBuff[pixelIndex + 1] = (byte)(0);
-                        //pBuff[pixelIndex + 2] = (byte)(255);
                     }
 
                     using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
@@ -743,7 +965,6 @@ namespace ArknightsTagMarker
         /// <param name="part"></param>
         public void ConsoleOutput(byte part, string[] tags = null!)
         {
-            return;
             try
             {// this will cause exception and return if console is not open coz i dont want to change
              // code here + text in .csproj file when i want to enable/disable console output

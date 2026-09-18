@@ -264,6 +264,87 @@ namespace ArknightsTagMarker
             return (boxWidth, boxHeight, boxX, boxY, sideGap, topGap);
         }
 
+        // need to put and cache these values here to be in scope for the whole app for GetTagImages()
+        static int BoxX       = 0;
+        static int BoxY       = 0;
+        static int BoxWidth   = 0;
+        static int BoxHeight  = 0;
+        static int BoxSideGap = 0;
+        static int BoxTopGap  = 0;
+
+        void GetTagImages()
+        {
+            // this is hard coded and scuffed but it doesnt matter since the number of tags and positions NEVER CHANGE NOR WILL
+            // X and Y needs to be declared separately, BoxY and BoxY values cant be changed and need to stay the same
+            // X and Y values will be changed to mathematically find all boxes positions
+            int X = BoxX;
+            int Y = BoxY;
+            // for OCR if there is too much free space (no letters) then accuracy dies
+            uint boxHeight = (uint)(BoxHeight * 0.54);
+            uint boxWidth =  (uint)(BoxWidth  * 0.85);
+            for (int i = 0; i < BoxCount - 3; i++)
+            {
+                switch (i)
+                {
+                    case 0: // bottom middle
+                        MagickReadSettings.ExtractArea = new MagickGeometry(
+                             CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth)  / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight) / 2)
+                            ,boxWidth, boxHeight);
+                        break;
+                    case 1: // bottom left
+                        X = X - BoxSideGap - BoxWidth + 1;
+                        MagickReadSettings.ExtractArea = new MagickGeometry(
+                             CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth)  / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 8) / 2)
+                            ,boxWidth, boxHeight);
+                        break;
+                    case 2: // top left
+                        Y = Y - BoxTopGap - BoxHeight + 1;
+                        MagickReadSettings.ExtractArea = new MagickGeometry(
+                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                            ,boxWidth, boxHeight);
+                        break;
+                    case 3: // top middle
+                        X = X + BoxSideGap + BoxWidth - 1;
+                        MagickReadSettings.ExtractArea = new MagickGeometry(
+                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                            ,boxWidth, boxHeight);
+                        break;
+                    case 4: // top right
+                        X = X + BoxSideGap + BoxWidth - 1;
+                        MagickReadSettings.ExtractArea = new MagickGeometry(
+                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                            ,boxWidth, boxHeight);
+                        break;
+                }
+
+                using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                {
+                    //image.Negate();
+                    //
+                    //using (IPixelCollection<byte> pixels = image.GetPixels())
+                    //{
+                    //    foreach (IPixel<byte> pixel in pixels)
+                    //    {
+                    //        IMagickColor<byte>? currentPixelColour = pixel.ToColor();
+                    //        if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
+                    //        {
+                    //            pixel.SetChannel(0, 255);
+                    //            pixel.SetChannel(1, 255);
+                    //            pixel.SetChannel(2, 255);
+                    //        }
+                    //    }
+                    //}
+
+                    image.Write($"ball{i}.tiff", MagickFormat.Tiff);
+                }
+            }
+        }
+
         unsafe private void Update(object? sender, EventArgs e)
         {
             ConsoleOutput(1);
@@ -280,8 +361,7 @@ namespace ArknightsTagMarker
                     GetWindowRect(Ptr, ref CapturedWindowRect);
 
                     MagickReadSettings.ExtractArea = new MagickGeometry(
-                    CapturedWindowRect.Left, CapturedWindowRect.Top,
-                    (uint)(PrevWidth), (uint)(PrevHeight));
+                        CapturedWindowRect.Left, CapturedWindowRect.Top, (uint)PrevWidth, (uint)PrevHeight);
 
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
@@ -306,17 +386,6 @@ namespace ArknightsTagMarker
 
                     int x = writableImage.PixelWidth / 2;
                     int y = 0;
-                    Console.WriteLine("AAAAAAAAAAAAAAAAA");
-
-                    // how about...
-                    // 3 pointers and for loop that executes twice
-                    // first loop ignores 3rd pointer
-
-                    Vector2 left   = new Vector2(0, 0);
-                    Vector2 middle = new Vector2(0, 0);
-                    Vector2 right  = new Vector2(0, 0);
-                    
-                    Dictionary<int, Rect> boxes = new Dictionary<int, Rect>();
 
                     // start from bottom, from half of the width
                     for (y = writableImage.PixelHeight - 3; y > 0; y--)
@@ -331,207 +400,15 @@ namespace ArknightsTagMarker
 
                         if (b == 49 && g == 49 && r == 49)
                         {
-                            // get widht and height
-                            // there is small problem... there are particles flying all the time that can possibly 
-                            // mess everything up
-                            (int boxWidth, int boxHeight, int X, int Y, int sideGap, int topGap) 
+                            (BoxWidth, BoxHeight, BoxX, BoxY, BoxSideGap, BoxTopGap) 
                             = GetTagBoxSizeAndCords(b, g, r, pixelX, pixelY, pixelIndex, x, y, backBufferStride, pBuff);
-
-                            // for now scuffed way
-                            for (int i = 0; i < BoxCount; i++)
-                            {
-                                switch (i)
-                                {
-                                    case 0: // bottom middle
-                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
-                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);                                      
-                                        break;
-                                    case 1: // bottom left
-                                        X = X - sideGap - boxWidth + 1;
-                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
-                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
-                                        break;
-                                    case 2: // top left
-                                        Y = Y - topGap - boxHeight + 1;
-                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
-                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
-                                        break;
-                                    case 3: // top middle
-                                        X = X + sideGap + boxWidth - 1;
-                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
-                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
-                                        break;
-                                    case 4: // top right
-                                        X = X + sideGap + boxWidth - 1;
-                                        MagickReadSettings.ExtractArea = new MagickGeometry(CapturedWindowRect.Left + X
-                                            , CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
-                                        break;
-                                }
-
-                                using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
-                                {
-                                    image.Write($"ball{i}.tiff", MagickFormat.Tiff);
-                                }
-                            }
-                            MagickReadSettings.ExtractArea = new MagickGeometry(
-                            CapturedWindowRect.Left + X, CapturedWindowRect.Top + Y, (uint)boxWidth, (uint)boxHeight);
-
-                            // PERFECTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                            using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
-                            {
-                                image.Write($"ball.tiff", MagickFormat.Tiff);
-                            }
-
-                            // small idea: calculate only one box X and Y position
-                            // and calculate size od the gaps between tags, then i can just math it out for all positions
-                            // im genius... how do i do that nicely... im dumb
-
-                            // here will get X and Y pos of top left corner (since WPF defaults 0,0 pos of objects as left corner
-                            // then use all values for tag boxes dimensions and positions
-                            // then im done?
-
-                            break;
-                            int xPos = 0;
-                            int yPos = 0;
-                            for (int row = 0; row < 2; row++)
-                            {
-                                // 3 columns
-                                for (int col = 0; col < 3; col++)
-                                {
-                                    if (row == 0 && col == 2)
-                                    {// skipping empty tag space in first row (looking for tags from the bottom of the game window)
-                                        continue;
-                                    }
-
-                                    if (col == 0)
-                                    {
-                                        xPos = x - boxWidth;
-                                    }
-                                    else if (col == 2)
-                                    {
-                                        xPos = x + boxWidth;
-                                    }
-                                    else
-                                    {
-                                        xPos = x;
-                                    }
-
-                 
-
-                                    pixelX = 4 * xPos;
-                                    yPos = y;
-                                    pixelIndex = pixelX + pixelY;
-                                    b = pBuff[pixelIndex];
-                                    g = pBuff[pixelIndex + 1];
-                                    r = pBuff[pixelIndex + 2];
-                                    pBuff[pixelIndex + 0] = (byte)(255);
-                                    pBuff[pixelIndex + 1] = (byte)(234);
-                                    pBuff[pixelIndex + 2] = (byte)(0);
-                                    if (b != 49 && g != 49 && r != 49)
-                                    {
-                                        continue;
-                                    }
-
-                                    // go to left
-                                    while (b == 49 && g == 49 && r == 49)
-                                    {
-                                        xPos++;
-                                        pixelX = 4 * xPos;
-                                        pixelIndex = pixelX + pixelY;
-
-                                        b = pBuff[pixelIndex];
-                                        g = pBuff[pixelIndex + 1];
-                                        r = pBuff[pixelIndex + 2];
-
-                                        pBuff[pixelIndex + 0] = (byte)(0);
-                                        pBuff[pixelIndex + 1] = (byte)(0);
-                                        pBuff[pixelIndex + 2] = (byte)(255);
-                                    }
-
-                                    xPos--;
-                                    pixelX = 4 * x;
-                                    pixelIndex = pixelX + pixelY;
-                                    b = pBuff[pixelIndex];
-                                    g = pBuff[pixelIndex + 1];
-                                    r = pBuff[pixelIndex + 2];
-
-                                    while (r == 255 || (b == 49 && g == 49 && r == 49))
-                                    {
-                                        yPos++;
-                                        pixelY = yPos * backBufferStride;
-                                        pixelIndex = pixelX + pixelY;
-
-                                        b = pBuff[pixelIndex];
-                                        g = pBuff[pixelIndex + 1];
-                                        r = pBuff[pixelIndex + 2];
-
-                                        pBuff[pixelIndex + 0] = (byte)(0);
-                                        pBuff[pixelIndex + 1] = (byte)(0);
-                                        pBuff[pixelIndex + 2] = (byte)(255);
-                                    }
-
-                                    yPos--;
-                                    pixelY = yPos * backBufferStride;
-                                    pixelIndex = pixelX + pixelY;
-                                    b = pBuff[pixelIndex];
-                                    g = pBuff[pixelIndex + 1];
-                                    r = pBuff[pixelIndex + 2];
-                                }
-                            }
-
-
-                            //y -= 30;
-                            //pixelY = y * backBufferStride;
-                            //// go to left
-                            //while (b == 49 && g == 49 && r == 49)
-                            //{
-                            //    x++;
-                            //    pixelX = 4 * x;
-                            //    pixelIndex = pixelX + pixelY;
-                            //
-                            //    b = pBuff[pixelIndex];
-                            //    g = pBuff[pixelIndex + 1];
-                            //    r = pBuff[pixelIndex + 2];
-                            //
-                            //    pBuff[pixelIndex + 0] = (byte)(0);
-                            //    pBuff[pixelIndex + 1] = (byte)(0);
-                            //    pBuff[pixelIndex + 2] = (byte)(255);
-                            //}
-                            //
-                            //x--;
-                            //pixelX = 4 * x;
-                            //pixelIndex = pixelX + pixelY;
-                            //b = pBuff[pixelIndex];
-                            //g = pBuff[pixelIndex + 1];
-                            //r = pBuff[pixelIndex + 2];
-                            //
-                            //while (r == 255 || (b == 49 && g == 49 && r == 49))
-                            //{
-                            //    y++;
-                            //    pixelY = y * backBufferStride;
-                            //    pixelIndex = pixelX + pixelY;
-                            //
-                            //    b = pBuff[pixelIndex];
-                            //    g = pBuff[pixelIndex + 1];
-                            //    r = pBuff[pixelIndex + 2];
-                            //
-                            //    pBuff[pixelIndex + 0] = (byte)(0);
-                            //    pBuff[pixelIndex + 1] = (byte)(0);
-                            //    pBuff[pixelIndex + 2] = (byte)(255);
-                            //}
-                            //
-                            //y--;
-                            //pixelY = y * backBufferStride;
-                            //pixelIndex = pixelX + pixelY;
-                            //b = pBuff[pixelIndex];
-                            //g = pBuff[pixelIndex + 1];
-                            //r = pBuff[pixelIndex + 2];
-
 
                             break;
                         }
                     }
 
+                    // this is not needed for the app but will leave it coz i need to test stuff
+                    // DONT FORGET TO TEST STUFF
                     using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
                     {
                         PngBitmapEncoder encoder5 = new PngBitmapEncoder();
@@ -556,6 +433,12 @@ namespace ArknightsTagMarker
             UpdateTagBoxesPositionData();
             ResizeResultBoxFontSize();
 
+            Stopwatch banana = new Stopwatch();
+            banana.Start();
+            GetTagImages();
+            banana.Stop();
+            Console.WriteLine(banana.ElapsedTicks);
+
             try
             {
                 /*
@@ -571,52 +454,55 @@ namespace ArknightsTagMarker
                 //bitmap.Dispose();
                 */
 
-                for (int i = 0; i < BoxCount; i++)
-                {
-                    // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
-                    MagickReadSettings.ExtractArea = new MagickGeometry(
-                        // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
-                        (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
-                        (uint)(Width * 0.15), (uint)(Height * 0.05));
 
-                    using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
-                    {
-                        /*
-                        // some options i used but werent really needed but i will leave this commented to know it exists
-                        //image.Morphology(MorphologySettings);
-                        //image.AdaptiveSharpen(0, 30.0);
-                        //image.UnsharpMask(1, 1);
-                        //image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
 
-                        // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
-                        // 400 seems pretty good there with all other configurations i have set up
-                        //image.Scale(new Percentage(100 / (image.Width / 200.0)));
-                        */
 
-                        // negate and then recolour grayish colours to pure white for best accuracy
-                        image.Negate(Channels.RGB);
-
-                        // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info that this is disposable
-                        using (IPixelCollection<byte> pixels = image.GetPixels())
-                        {
-                            foreach (IPixel<byte> pixel in pixels)
-                            {
-                                IMagickColor<byte>? currentPixelColour = pixel.ToColor();
-                                if (currentPixelColour.R > 130 && currentPixelColour.G > 130 && currentPixelColour.B > 130)
-                                {
-                                    pixel.SetChannel(0, 255);
-                                    pixel.SetChannel(1, 255);
-                                    pixel.SetChannel(2, 255);
-                                }
-                            }
-                        }
-
-                        // idk if format matters coz from what i tested everything seems the same... saw that someone wrote
-                        // that .tiff has best accuracy but i didnt see difference between tiff, png and jpeg... but will trust this
-                        // random internet person anyway since i know nothing about that stuff and it was in topic of Tesseract OCR
-                        image.Write($"banana{i}.tiff", MagickFormat.Tiff);
-                    }
-                }
+                 for (int i = 0; i < BoxCount; i++)
+                 {
+                     // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
+                     MagickReadSettings.ExtractArea = new MagickGeometry(
+                         // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
+                         (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
+                         (uint)(Width * 0.15), (uint)(Height * 0.05));
+                
+                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+                     {
+                         /*
+                         // some options i used but werent really needed but i will leave this commented to know it exists
+                         //image.Morphology(MorphologySettings);
+                         //image.AdaptiveSharpen(0, 30.0);
+                         //image.UnsharpMask(1, 1);
+                         //image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
+                
+                         // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
+                         // 400 seems pretty good there with all other configurations i have set up
+                         //image.Scale(new Percentage(100 / (image.Width / 200.0)));
+                         */
+                
+                         // negate and then recolour grayish colours to pure white for best accuracy
+                         image.Negate(Channels.RGB);
+                
+                         // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info that this is disposable
+                         using (IPixelCollection<byte> pixels = image.GetPixels())
+                         {
+                             foreach (IPixel<byte> pixel in pixels)
+                             {
+                                 IMagickColor<byte>? currentPixelColour = pixel.ToColor();
+                                 if (currentPixelColour.R > 130 && currentPixelColour.G > 130 && currentPixelColour.B > 130)
+                                 {
+                                     pixel.SetChannel(0, 255);
+                                     pixel.SetChannel(1, 255);
+                                     pixel.SetChannel(2, 255);
+                                 }
+                             }
+                         }
+                
+                         // idk if format matters coz from what i tested everything seems the same... saw that someone wrote
+                         // that .tiff has best accuracy but i didnt see difference between tiff, png and jpeg... but will trust this
+                         // random internet person anyway since i know nothing about that stuff and it was in topic of Tesseract OCR
+                         image.Write($"banana{i}.tiff", MagickFormat.Tiff);
+                     }
+                 }
 
                 MarkTag();
             } catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
@@ -630,7 +516,7 @@ namespace ArknightsTagMarker
             string text = "";
             for (int i = 0; i < BoxCount; i++)
             {
-                Pix img = Pix.LoadFromFile($"banana{i}.tiff");
+                Pix img = Pix.LoadFromFile($"ball{i}.tiff");
                 
                 // doesnt really help but leaving it here to know this even exists
                 //Pix grayImage = scaledImage.ConvertRGBToGray();

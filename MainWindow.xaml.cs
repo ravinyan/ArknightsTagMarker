@@ -272,6 +272,7 @@ namespace ArknightsTagMarker
         static int BoxSideGap = 0;
         static int BoxTopGap  = 0;
 
+        // lowest resolution that is working: 1024x768, everything above that works
         void GetTagImages()
         {
             // this is hard coded and scuffed but it doesnt matter since the number of tags and positions NEVER CHANGE NOR WILL
@@ -280,63 +281,99 @@ namespace ArknightsTagMarker
             int X = BoxX;
             int Y = BoxY;
             // for OCR if there is too much free space (no letters) then accuracy dies
-            uint boxHeight = (uint)(BoxHeight * 0.54);
+            uint boxHeight = (uint)(BoxHeight * 0.80);
             uint boxWidth =  (uint)(BoxWidth  * 0.85);
-            for (int i = 0; i < BoxCount - 3; i++)
+            for (int i = 0; i < BoxCount; i++)
             {
                 switch (i)
                 {
                     case 0: // bottom middle
                         MagickReadSettings.ExtractArea = new MagickGeometry(
                              CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth)  / 2)
-                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 6) / 2)
                             ,boxWidth, boxHeight);
                         break;
                     case 1: // bottom left
                         X = X - BoxSideGap - BoxWidth + 1;
                         MagickReadSettings.ExtractArea = new MagickGeometry(
                              CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth)  / 2)
-                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 8) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 6) / 2)
                             ,boxWidth, boxHeight);
                         break;
                     case 2: // top left
                         Y = Y - BoxTopGap - BoxHeight + 1;
                         MagickReadSettings.ExtractArea = new MagickGeometry(
-                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
-                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                             CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 6) / 2)
                             ,boxWidth, boxHeight);
                         break;
                     case 3: // top middle
                         X = X + BoxSideGap + BoxWidth - 1;
                         MagickReadSettings.ExtractArea = new MagickGeometry(
-                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
-                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                             CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 6) / 2)
                             ,boxWidth, boxHeight);
                         break;
                     case 4: // top right
                         X = X + BoxSideGap + BoxWidth - 1;
                         MagickReadSettings.ExtractArea = new MagickGeometry(
-                             CapturedWindowRect.Left + X + (int)((BoxWidth - boxWidth) / 2)
-                            ,CapturedWindowRect.Top  + Y + (int)(boxHeight / 2)
+                             CapturedWindowRect.Left + X + (int)((BoxWidth  - boxWidth) / 2)
+                            ,CapturedWindowRect.Top  + Y + (int)((BoxHeight - boxHeight + 6) / 2)
                             ,boxWidth, boxHeight);
                         break;
                 }
 
                 using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                 {
+                    int p1 = 1; // from left to right
+                    int p2 = 1; // from right to left
+                    using (IPixelCollection<byte> pixels = image.GetPixels())
+                    {
+                        bool p1Stop = false;
+                        bool p2Stop = false;
+                        while (p1Stop == false && p2Stop == false)
+                        {// background colour is 49,49,49 so safe to assume this is enough
+                            if (pixels[p1, (int)(boxHeight / 2)]!.ToColor()!.G > 100)
+                            {
+                                p1Stop = true;
+                            }
+                        
+                            if (pixels[(int)boxWidth - p2, (int)(boxHeight / 2)]!.ToColor()!.G > 100)
+                            {
+                                p2Stop = true;
+                            }
+                        
+                            if (p1Stop == false)
+                            {
+                                p1++;
+                            }
+                            if (p2Stop == false)
+                            {
+                                p2++;
+                            }
+                        }
+                    }
+
+                    // -6 pixels here is in situations like letters A or V, so the line that goes through the middle wont cut off
+                    // letters like that by few pixels
+                    p1 = p1 - 6 < 0 ? 0 : p1 - 6;
+                    p2 = p2 - 6 < 0 ? 0 : p2 - 6;
+
+                    // chopping image to only include letters, if there is too much empty space then
+                    // OCR doesnt feel like reading short tags like AoE or Caster
+                    image.ChopHorizontal(0, (uint)p1);
+                    image.ChopHorizontal((int)boxWidth - p2 - p1, (uint)p2);
+
+                    // this might be better but will test on more tags later
                     //image.Negate();
-                    //
-                    //using (IPixelCollection<byte> pixels = image.GetPixels())
+                    //foreach (IPixel<byte> pixel in image.GetPixels())
                     //{
-                    //    foreach (IPixel<byte> pixel in pixels)
+                    //    IMagickColor<byte>? currentPixelColour = pixel.ToColor();
+                    //    if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
                     //    {
-                    //        IMagickColor<byte>? currentPixelColour = pixel.ToColor();
-                    //        if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
-                    //        {
-                    //            pixel.SetChannel(0, 255);
-                    //            pixel.SetChannel(1, 255);
-                    //            pixel.SetChannel(2, 255);
-                    //        }
+                    //        pixel.SetChannel(0, 255);
+                    //        pixel.SetChannel(1, 255);
+                    //        pixel.SetChannel(2, 255);
                     //    }
                     //}
 
@@ -361,7 +398,9 @@ namespace ArknightsTagMarker
                     GetWindowRect(Ptr, ref CapturedWindowRect);
 
                     MagickReadSettings.ExtractArea = new MagickGeometry(
-                        CapturedWindowRect.Left, CapturedWindowRect.Top, (uint)PrevWidth, (uint)PrevHeight);
+                         CapturedWindowRect.Left < 0 ? 0 : CapturedWindowRect.Left
+                        ,CapturedWindowRect.Top  < 0 ? 0 : CapturedWindowRect.Top
+                        ,(uint)PrevWidth, (uint)PrevHeight);
 
                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
                     {
@@ -388,6 +427,10 @@ namespace ArknightsTagMarker
                     int y = 0;
 
                     // start from bottom, from half of the width
+
+                    // last thing to do is to detect if user is not in recruitment tag menu
+                    // without that app will crash if user opens it anywhere else
+                    // or i can just say you need to open the app only in the tag menu... will see
                     for (y = writableImage.PixelHeight - 3; y > 0; y--)
                     {
                         pixelX = 4 * x;
@@ -433,77 +476,11 @@ namespace ArknightsTagMarker
             UpdateTagBoxesPositionData();
             ResizeResultBoxFontSize();
 
-            Stopwatch banana = new Stopwatch();
-            banana.Start();
-            GetTagImages();
-            banana.Stop();
-            Console.WriteLine(banana.ElapsedTicks);
 
             try
             {
-                /*
-                // old implementation but will leave it here for now coz i already wanted it 3 times to check something
-                //Bitmap bitmap = new Bitmap((int)(Width * 0.17), (int)(Height * 0.13));
-                //Graphics g = Graphics.FromImage(bitmap);
-                //for (int i = 0; i < BoxCount; i++)
-                //{
-                //    g.CopyFromScreen((int)(TagBoxes[i].X), (int)(TagBoxes[i].Y), 0, 0, bitmap.Size);
-                //    bitmap.Save($"banana{i}.png", System.Drawing.Imaging.ImageFormat.Png);
-                //}
-                //g.Dispose();
-                //bitmap.Dispose();
-                */
-
-
-
-
-                 for (int i = 0; i < BoxCount; i++)
-                 {
-                     // original > MagickReadSettings.ExtractArea = new MagickGeometry((int)TagBoxes[i].X, (int)TagBoxes[i].Y, (uint)(Width * 0.17), (uint)(Height * 0.13));
-                     MagickReadSettings.ExtractArea = new MagickGeometry(
-                         // 10 is some kind of padding Arknights uses i think? helps with screenshot positions to be more centered on tag names
-                         (int)TagBoxes[i].X - 10, (int)TagBoxes[i].Y + 10,
-                         (uint)(Width * 0.15), (uint)(Height * 0.05));
-                
-                     using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
-                     {
-                         /*
-                         // some options i used but werent really needed but i will leave this commented to know it exists
-                         //image.Morphology(MorphologySettings);
-                         //image.AdaptiveSharpen(0, 30.0);
-                         //image.UnsharpMask(1, 1);
-                         //image.Grayscale(); // when box becomes blue (selected) this improves OCR accuracy
-                
-                         // maybe dynamically adjust this so image size will always be the same... too big = bad and too small = also bad
-                         // 400 seems pretty good there with all other configurations i have set up
-                         //image.Scale(new Percentage(100 / (image.Width / 200.0)));
-                         */
-                
-                         // negate and then recolour grayish colours to pure white for best accuracy
-                         image.Negate(Channels.RGB);
-                
-                         // is this love in the air? no its RAM leak *PC explodes*... would be nice if there was info that this is disposable
-                         using (IPixelCollection<byte> pixels = image.GetPixels())
-                         {
-                             foreach (IPixel<byte> pixel in pixels)
-                             {
-                                 IMagickColor<byte>? currentPixelColour = pixel.ToColor();
-                                 if (currentPixelColour.R > 130 && currentPixelColour.G > 130 && currentPixelColour.B > 130)
-                                 {
-                                     pixel.SetChannel(0, 255);
-                                     pixel.SetChannel(1, 255);
-                                     pixel.SetChannel(2, 255);
-                                 }
-                             }
-                         }
-                
-                         // idk if format matters coz from what i tested everything seems the same... saw that someone wrote
-                         // that .tiff has best accuracy but i didnt see difference between tiff, png and jpeg... but will trust this
-                         // random internet person anyway since i know nothing about that stuff and it was in topic of Tesseract OCR
-                         image.Write($"banana{i}.tiff", MagickFormat.Tiff);
-                     }
-                 }
-
+                GetTagImages();
+                // old implementation here https://github.com/ravinyan/ArknightsTagMarker/blob/e046297ce13337cb64a2016ef28badc23d5c9c9a/MainWindow.xaml.cs#L352
                 MarkTag();
             } catch { } // there might be some exceptions and crashes but i cant care enough to looks for them since they dont break the app
             //              ^ this also makes finding bugs harder by myself but oh well

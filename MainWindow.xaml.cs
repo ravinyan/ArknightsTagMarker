@@ -272,16 +272,96 @@ namespace ArknightsTagMarker
         static int BoxSideGap = 0;
         static int BoxTopGap  = 0;
 
-        // lowest resolution that is working: 1024x768, everything above that works
+        unsafe void PrepareDataFromGameImage()
+        {
+            // scuffed but prevents crash
+            GetWindowRect(Ptr, ref CapturedWindowRect);
+
+            MagickReadSettings.ExtractArea = new MagickGeometry(
+                 CapturedWindowRect.Left < 0 ? 0 : CapturedWindowRect.Left
+                ,CapturedWindowRect.Top  < 0 ? 0 : CapturedWindowRect.Top
+                ,(uint)PrevWidth, (uint)PrevHeight);
+
+
+            // not enough space or file is in use... either this or that or both...
+            // maybe will think about something... for now i dont want to
+            using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
+            {
+                image.Write($"HELPPPP.tiff", MagickFormat.Tiff);
+            }
+                
+            BitmapImage sourceImage = new BitmapImage();
+            sourceImage.BeginInit();
+            sourceImage.UriSource = new Uri($"{AppContext.BaseDirectory}\\HELPPPP.tiff");
+            sourceImage.EndInit();
+
+            WriteableBitmap writableImage = new WriteableBitmap(sourceImage);
+            IntPtr pBackBuffer = writableImage.BackBuffer;
+            byte* pBuff = (byte*)pBackBuffer.ToPointer();
+
+            int backBufferStride = writableImage.BackBufferStride;
+
+            int pixelX;
+            int pixelY;
+            int pixelIndex;
+
+            byte b;
+            byte g;
+            byte r;
+
+            int x = writableImage.PixelWidth / 2;
+            int y = 0;
+
+            // start from bottom, from half of the width
+            for (y = writableImage.PixelHeight - 3; y > 0; y--)
+            {
+                if (y < writableImage.PixelHeight * 0.4)
+                {// at this point tag cant be found, return to not cause crash
+                    return;
+                }
+                pixelX = 4 * x;
+                pixelY = y * backBufferStride;
+                pixelIndex = pixelX + pixelY;
+
+                b = pBuff[pixelIndex];
+                g = pBuff[pixelIndex + 1];
+                r = pBuff[pixelIndex + 2];
+
+                if (b == 49 && g == 49 && r == 49)
+                {
+                    (BoxWidth, BoxHeight, BoxX, BoxY, BoxSideGap, BoxTopGap)
+                    = GetTagBoxSizeAndCords(b, g, r, pixelX, pixelY, pixelIndex, x, y, backBufferStride, pBuff);
+
+                    break;
+                }
+            }
+
+            // this is not needed for the app but will leave it coz i need to test stuff
+            // DONT FORGET TO TEST STUFF
+            //using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
+            //{
+            //    PngBitmapEncoder encoder5 = new PngBitmapEncoder();
+            //    encoder5.Frames.Add(BitmapFrame.Create(writableImage));
+            //    encoder5.Save(stream5);
+            //}
+        }
+
+        // lowest resolution that is working: 1024x768, everything above that also works
+        // do to: some sneaky way to evade not enough space exception and file in use exception...
         void GetTagImages()
         {
+            if (BoxY == 0)
+            {
+                return;
+            }
+
             // this is hard coded and scuffed but it doesnt matter since the number of tags and positions NEVER CHANGE NOR WILL
             // X and Y needs to be declared separately, BoxY and BoxY values cant be changed and need to stay the same
             // X and Y values will be changed to mathematically find all boxes positions
             int X = BoxX;
             int Y = BoxY;
             // for OCR if there is too much free space (no letters) then accuracy dies
-            uint boxHeight = (uint)(BoxHeight * 0.80);
+            uint boxHeight = (uint)(BoxHeight * 0.70);
             uint boxWidth =  (uint)(BoxWidth  * 0.85);
             for (int i = 0; i < BoxCount; i++)
             {
@@ -365,17 +445,18 @@ namespace ArknightsTagMarker
                     image.ChopHorizontal((int)boxWidth - p2 - p1, (uint)p2);
 
                     // this might be better but will test on more tags later
-                    //image.Negate();
-                    //foreach (IPixel<byte> pixel in image.GetPixels())
-                    //{
-                    //    IMagickColor<byte>? currentPixelColour = pixel.ToColor();
-                    //    if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
-                    //    {
-                    //        pixel.SetChannel(0, 255);
-                    //        pixel.SetChannel(1, 255);
-                    //        pixel.SetChannel(2, 255);
-                    //    }
-                    //}
+                    // THIS IS BETTER
+                    image.Negate();
+                    foreach (IPixel<byte> pixel in image.GetPixels())
+                    {
+                        IMagickColor<byte> currentPixelColour = pixel.ToColor()!;
+                        if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
+                        {
+                            pixel.SetChannel(0, 255);
+                            pixel.SetChannel(1, 255);
+                            pixel.SetChannel(2, 255);
+                        }
+                    }
 
                     image.Write($"ball{i}.tiff", MagickFormat.Tiff);
                 }
@@ -389,75 +470,12 @@ namespace ArknightsTagMarker
             if (IsPC)
             {
                 GetClientRect(Ptr, ref CapturedWindowRect);
-
                 if (PrevHeight != CapturedWindowRect.Bottom || PrevWidth != CapturedWindowRect.Right)
                 {
                     PrevHeight = CapturedWindowRect.Bottom;
                     PrevWidth = CapturedWindowRect.Right;
 
-                    GetWindowRect(Ptr, ref CapturedWindowRect);
-
-                    MagickReadSettings.ExtractArea = new MagickGeometry(
-                         CapturedWindowRect.Left < 0 ? 0 : CapturedWindowRect.Left
-                        ,CapturedWindowRect.Top  < 0 ? 0 : CapturedWindowRect.Top
-                        ,(uint)PrevWidth, (uint)PrevHeight);
-
-                    using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
-                    {
-                        image.Write($"HELPPPP.tiff", MagickFormat.Tiff);
-                    }
-
-                    BitmapSource sourceImage = new BitmapImage(new Uri($"{AppContext.BaseDirectory}\\HELPPPP.tiff"));
-                    WriteableBitmap writableImage = new WriteableBitmap(sourceImage);
-                    
-                    IntPtr pBackBuffer = writableImage.BackBuffer;
-                    byte* pBuff = (byte*)pBackBuffer.ToPointer();
-
-                    int backBufferStride = writableImage.BackBufferStride;
-
-                    int pixelX;
-                    int pixelY;
-                    int pixelIndex;
-
-                    byte b;
-                    byte g;
-                    byte r;
-
-                    int x = writableImage.PixelWidth / 2;
-                    int y = 0;
-
-                    // start from bottom, from half of the width
-
-                    // last thing to do is to detect if user is not in recruitment tag menu
-                    // without that app will crash if user opens it anywhere else
-                    // or i can just say you need to open the app only in the tag menu... will see
-                    for (y = writableImage.PixelHeight - 3; y > 0; y--)
-                    {
-                        pixelX = 4 * x;
-                        pixelY = y * backBufferStride;
-                        pixelIndex = pixelX + pixelY;
-
-                        b = pBuff[pixelIndex];
-                        g = pBuff[pixelIndex + 1];
-                        r = pBuff[pixelIndex + 2];
-
-                        if (b == 49 && g == 49 && r == 49)
-                        {
-                            (BoxWidth, BoxHeight, BoxX, BoxY, BoxSideGap, BoxTopGap) 
-                            = GetTagBoxSizeAndCords(b, g, r, pixelX, pixelY, pixelIndex, x, y, backBufferStride, pBuff);
-
-                            break;
-                        }
-                    }
-
-                    // this is not needed for the app but will leave it coz i need to test stuff
-                    // DONT FORGET TO TEST STUFF
-                    using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
-                    {
-                        PngBitmapEncoder encoder5 = new PngBitmapEncoder();
-                        encoder5.Frames.Add(BitmapFrame.Create(writableImage));
-                        encoder5.Save(stream5);
-                    }
+                    PrepareDataFromGameImage();
                 }
 
                 if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
@@ -473,7 +491,7 @@ namespace ArknightsTagMarker
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
             ResizeTagBoxes();
-            UpdateTagBoxesPositionData();
+            //UpdateTagBoxesPositionData();
             ResizeResultBoxFontSize();
 
 

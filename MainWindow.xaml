@@ -9,22 +9,6 @@
         ResizeMode="NoResize" WindowStyle="None" AllowsTransparency="True" Topmost="True"
         Background="Transparent" BorderBrush="Transparent" BorderThickness="2">
     <Grid x:Name="MainGrid">
-        <!--- first and last row/col are the borders, stuff in middle will contain tag boxes -->
-        <Grid.RowDefinitions>
-            <RowDefinition x:Name="MainGridBorderTop"/>
-            <RowDefinition/>
-            <RowDefinition/>
-            <RowDefinition x:Name="MainGridBorderBottom"/>
-        </Grid.RowDefinitions>
-
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition x:Name="MainGridBorderLeft" />
-            <ColumnDefinition/>
-            <ColumnDefinition/>
-            <ColumnDefinition/>
-            <ColumnDefinition x:Name="MainGridBorderRight"/>
-        </Grid.ColumnDefinitions>
-
         <Canvas Name="CanvasBox">
             <!--<Border x:Name="borderr" BorderBrush="Red" BorderThickness="1" Width="50" Height="20"></Border>-->
             <Grid x:Name="TagsAvailable">
@@ -46,11 +30,6 @@
                     <TextBlock x:Name="TextBox5StarTags" Background="Transparent" Foreground="Black" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="5* Tags: "></TextBlock>
                 </Border>
 
-                <!--- opaque version
-                <TextBlock x:Name="TextBox4StarTags" Grid.Row="0" Background="Black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="4* Tags: "></TextBlock>
-                <TextBlock x:Name="TextBox5StarTags" Grid.Row="1" Background="Black" Foreground="White" FontWeight="Bold" TextWrapping="Wrap" FontSize="11" FontFamily="Cascadia Mono" Text="5* Tags: "></TextBlock>
-                -->
-                
                 <Button x:Name="CloseAppButton" Click="CloseAppButtonClick" Grid.Column="1">
                     <TextBlock TextWrapping="Wrap">Close</TextBlock>
                 </Button>

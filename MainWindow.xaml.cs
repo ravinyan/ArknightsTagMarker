@@ -7,7 +7,6 @@ using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
-using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Tesseract;
 
@@ -135,135 +134,6 @@ namespace ArknightsTagMarker
             timer.Start();
         }
 
-        unsafe (int, int, int, int, int, int) GetTagBoxSizeAndCords(byte b, byte g, byte r, int pixelX, int pixelY, int pixelIndex, int x, int y, int backBufferStride, byte* pBuff)
-        {
-            int boxWidth  = 0;
-            int boxHeight = 0;
-            int sideGap   = 0;
-            int topGap    = 0;
-
-            int tempX = x;
-            // i cant do one half *2 coz image cant be centered (multiple user end variables change that)
-            // slide to the right!
-            while (b == 49 && g == 49 && r == 49)
-            {
-                x++;
-                pixelX = 4 * x;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                boxWidth++;
-                pBuff[pixelIndex + 0] = (byte)(0);
-                pBuff[pixelIndex + 1] = (byte)(0);
-                pBuff[pixelIndex + 2] = (byte)(255);
-            }
-
-            // reset all values
-            x = tempX;
-            pixelX = 4 * x;
-            pixelIndex = pixelX + pixelY;
-            b = pBuff[pixelIndex];
-            g = pBuff[pixelIndex + 1];
-            r = pBuff[pixelIndex + 2];
-            // slide to the left!
-            while (b == 49 && g == 49 && r == 49)
-            {
-                x--;
-                pixelX = 4 * x;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                boxWidth++;
-
-                pBuff[pixelIndex + 0] = (byte)(0);
-                pBuff[pixelIndex + 1] = (byte)(0);
-                pBuff[pixelIndex + 2] = (byte)(255);
-            }
-
-            // reset stuff again
-            x++;
-            y--;
-            pixelX = 4 * x;
-            pixelY = y * backBufferStride;
-            pixelIndex = pixelX + pixelY;
-            b = pBuff[pixelIndex];
-            g = pBuff[pixelIndex + 1];
-            r = pBuff[pixelIndex + 2];
-
-            // slide... up?
-            int tempY = y;
-            while (b == 49 && g == 49 && r == 49)
-            {
-                pixelY = y * backBufferStride;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                boxHeight++;
-                pBuff[pixelIndex + 0] = (byte)(0);
-                pBuff[pixelIndex + 1] = (byte)(0);
-                pBuff[pixelIndex + 2] = (byte)(255);
-
-                y--;
-            }
-
-            // save this early since getting data from gaps will change these values
-            int boxX = x;
-            int boxY = y;
-
-            // well... since im at top left side... why also not get size of gaps between tags? lol
-            tempY = y + 1;
-            while (b != 49 || g != 49 || r != 49)
-            {
-                pixelY = y * backBufferStride;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                topGap++;
-                pBuff[pixelIndex + 0] = (byte)(0);
-                pBuff[pixelIndex + 1] = (byte)(0);
-                pBuff[pixelIndex + 2] = (byte)(255);
-
-                y--;
-            }
-
-            y = tempY + 1;
-            pixelY = y * backBufferStride;
-            pixelIndex = pixelX + pixelY;
-            b = pBuff[pixelIndex];
-            g = pBuff[pixelIndex + 1];
-            r = pBuff[pixelIndex + 2];
-
-            while (b != 49 || g != 49 || r != 49)
-            {
-                x--;
-                pixelX = 4 * x;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                sideGap++;
-                pBuff[pixelIndex + 0] = (byte)(0);
-                pBuff[pixelIndex + 1] = (byte)(0);
-                pBuff[pixelIndex + 2] = (byte)(255);
-            }
-
-            return (boxWidth, boxHeight, boxX, boxY, sideGap, topGap);
-        }
-
         // need to put and cache these values here to be in scope for the whole app for GetTagImages()
         static int BoxX       = 0;
         static int BoxY       = 0;
@@ -274,76 +144,138 @@ namespace ArknightsTagMarker
 
         unsafe void PrepareDataFromGameImage()
         {
-            // scuffed but prevents crash
             GetWindowRect(Ptr, ref CapturedWindowRect);
 
+            // scuffed but prevents crash on fullscreen when app is outside window borders
             MagickReadSettings.ExtractArea = new MagickGeometry(
                  CapturedWindowRect.Left < 0 ? 0 : CapturedWindowRect.Left
                 ,CapturedWindowRect.Top  < 0 ? 0 : CapturedWindowRect.Top
                 ,(uint)PrevWidth, (uint)PrevHeight);
 
-
             // not enough space or file is in use... either this or that or both...
             // maybe will think about something... for now i dont want to
             using (MagickImage image = new MagickImage("SCREENSHOT:", MagickReadSettings))
             {
+                int x = (int)(image.Width / 2);
+                int y = 0;
+
+                using (IPixelCollection<byte> pixels = image.GetPixels())
+                {
+                    for (y = (int)image.Height - 1; y > 0; y--)
+                    {
+                        IPixel<byte> pixel = pixels[(int)(image.Width / 2), y]!;
+                        IMagickColor<byte> currentPixelColour = pixel.ToColor()!;
+                        if (currentPixelColour.R == 49 && currentPixelColour.G == 49 && currentPixelColour.B == 49)
+                        {
+                            //pixel.SetChannel(0, 0);
+                            //pixel.SetChannel(1, 208);
+                            //pixel.SetChannel(2, 255);
+
+                            int boxWidth = 0;
+                            int boxHeight = 0;
+                            int sideGap = 0;
+                            int topGap = 0;
+
+                            int tempX = x;
+                            // i cant do one half *2 coz image cant be centered (multiple user end variables change that)
+                            // slide to the right!
+                            while (currentPixelColour.R == 49 && currentPixelColour.G == 49 && currentPixelColour.B == 49)
+                            {
+                                x++;
+                                currentPixelColour = pixels[x, y]!.ToColor()!;
+                                boxWidth++;
+
+                                //pixel = pixels[x, y]!;
+                                //pixel.SetChannel(0, 0);
+                                //pixel.SetChannel(1, 208);
+                                //pixel.SetChannel(2, 255);
+                            }
+
+                            // reset all values
+                            x = tempX;
+                            currentPixelColour = pixels[x, y]!.ToColor()!;
+
+                            // slide to the left!
+                            while (currentPixelColour.R == 49 && currentPixelColour.G == 49 && currentPixelColour.B == 49)
+                            {
+                                x--;
+                                currentPixelColour = pixels[x, y]!.ToColor()!;
+                                boxWidth++;
+
+                                //pixel = pixels[x, y]!;
+                                //pixel.SetChannel(0, 0);
+                                //pixel.SetChannel(1, 208);
+                                //pixel.SetChannel(2, 255);
+                            }
+
+                            // reset stuff again
+                            x++;
+                            y--;
+                            currentPixelColour = pixels[x, y]!.ToColor()!;
+
+                            // slide... up?
+                            int tempY = y;
+                            while (currentPixelColour.R == 49 && currentPixelColour.G == 49 && currentPixelColour.B == 49)
+                            {
+                                currentPixelColour = pixels[x, y]!.ToColor()!;
+                                boxHeight++;
+
+                                //pixel = pixels[x, y]!;
+                                //pixel.SetChannel(0, 0);
+                                //pixel.SetChannel(1, 208);
+                                //pixel.SetChannel(2, 255);
+
+                                y--;
+                            }
+
+                            // save values we have so far
+                            BoxWidth = boxWidth;
+                            BoxHeight = boxHeight;
+                            BoxX = x;
+                            BoxY = y;
+
+                            // well... since im at top left side... why also not get size of gaps between tags? lol
+                            tempY = y + 1;
+                            while (currentPixelColour.R != 49 || currentPixelColour.G != 49 || currentPixelColour.B != 49)
+                            {
+                                currentPixelColour = pixels[x, y]!.ToColor()!;
+                                topGap++;
+
+                                //pixel = pixels[x, y]!;
+                                //pixel.SetChannel(0, 0);
+                                //pixel.SetChannel(1, 208);
+                                //pixel.SetChannel(2, 255);
+
+                                y--;
+                            }
+
+                            y = tempY + 1;
+                            x--;
+                            currentPixelColour = pixels[x, y]!.ToColor()!;
+
+                            while (currentPixelColour.R != 49 || currentPixelColour.G != 49 || currentPixelColour.B != 49)
+                            {
+                                x--;
+                                currentPixelColour = pixels[x, y]!.ToColor()!;
+                                sideGap++;
+
+                                //pixel = pixels[x, y]!;
+                                //pixel.SetChannel(0, 0);
+                                //pixel.SetChannel(1, 208);
+                                //pixel.SetChannel(2, 255);
+                            }
+
+                            // save 2 last values of gaps between tags
+                            BoxTopGap = topGap;
+                            BoxSideGap = sideGap;
+
+                            break;
+                        }
+                    }
+                }
+
                 image.Write($"HELPPPP.tiff", MagickFormat.Tiff);
             }
-                
-            BitmapImage sourceImage = new BitmapImage();
-            sourceImage.BeginInit();
-            sourceImage.UriSource = new Uri($"{AppContext.BaseDirectory}\\HELPPPP.tiff");
-            sourceImage.EndInit();
-
-            WriteableBitmap writableImage = new WriteableBitmap(sourceImage);
-            IntPtr pBackBuffer = writableImage.BackBuffer;
-            byte* pBuff = (byte*)pBackBuffer.ToPointer();
-
-            int backBufferStride = writableImage.BackBufferStride;
-
-            int pixelX;
-            int pixelY;
-            int pixelIndex;
-
-            byte b;
-            byte g;
-            byte r;
-
-            int x = writableImage.PixelWidth / 2;
-            int y = 0;
-
-            // start from bottom, from half of the width
-            for (y = writableImage.PixelHeight - 3; y > 0; y--)
-            {
-                if (y < writableImage.PixelHeight * 0.4)
-                {// at this point tag cant be found, return to not cause crash
-                    return;
-                }
-                pixelX = 4 * x;
-                pixelY = y * backBufferStride;
-                pixelIndex = pixelX + pixelY;
-
-                b = pBuff[pixelIndex];
-                g = pBuff[pixelIndex + 1];
-                r = pBuff[pixelIndex + 2];
-
-                if (b == 49 && g == 49 && r == 49)
-                {
-                    (BoxWidth, BoxHeight, BoxX, BoxY, BoxSideGap, BoxTopGap)
-                    = GetTagBoxSizeAndCords(b, g, r, pixelX, pixelY, pixelIndex, x, y, backBufferStride, pBuff);
-
-                    break;
-                }
-            }
-
-            // this is not needed for the app but will leave it coz i need to test stuff
-            // DONT FORGET TO TEST STUFF
-            //using (FileStream stream5 = new FileStream("HELPPPNEW.png", FileMode.Create))
-            //{
-            //    PngBitmapEncoder encoder5 = new PngBitmapEncoder();
-            //    encoder5.Frames.Add(BitmapFrame.Create(writableImage));
-            //    encoder5.Save(stream5);
-            //}
         }
 
         // lowest resolution that is working: 1024x768, everything above that also works
@@ -436,8 +368,8 @@ namespace ArknightsTagMarker
 
                     // -6 pixels here is in situations like letters A or V, so the line that goes through the middle wont cut off
                     // letters like that by few pixels
-                    p1 = p1 - 6 < 0 ? 0 : p1 - 6;
-                    p2 = p2 - 6 < 0 ? 0 : p2 - 6;
+                    p1 = p1 - 10 < 0 ? 0 : p1 - 10;
+                    p2 = p2 - 10 < 0 ? 0 : p2 - 10;
 
                     // chopping image to only include letters, if there is too much empty space then
                     // OCR doesnt feel like reading short tags like AoE or Caster
@@ -447,14 +379,17 @@ namespace ArknightsTagMarker
                     // this might be better but will test on more tags later
                     // THIS IS BETTER
                     image.Negate();
-                    foreach (IPixel<byte> pixel in image.GetPixels())
+                    using (IPixelCollection<byte> pixels = image.GetPixels())
                     {
-                        IMagickColor<byte> currentPixelColour = pixel.ToColor()!;
-                        if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
+                        foreach (IPixel<byte> pixel in pixels)
                         {
-                            pixel.SetChannel(0, 255);
-                            pixel.SetChannel(1, 255);
-                            pixel.SetChannel(2, 255);
+                            IMagickColor<byte> currentPixelColour = pixel.ToColor()!;
+                            if (currentPixelColour.R > 180 && currentPixelColour.G > 180 && currentPixelColour.B > 180)
+                            {
+                                pixel.SetChannel(0, 255);
+                                pixel.SetChannel(1, 255);
+                                pixel.SetChannel(2, 255);
+                            }
                         }
                     }
 
@@ -474,8 +409,6 @@ namespace ArknightsTagMarker
                 {
                     PrevHeight = CapturedWindowRect.Bottom;
                     PrevWidth = CapturedWindowRect.Right;
-
-                    PrepareDataFromGameImage();
                 }
 
                 if (CapturedWindowRect.Bottom == MonitorScreen.Bounds.Height && CapturedWindowRect.Right == MonitorScreen.Bounds.Width)
@@ -490,13 +423,11 @@ namespace ArknightsTagMarker
 
             GetWindowRect(Ptr, ref CapturedWindowRect);
             MoveWindow();
-            ResizeTagBoxes();
-            //UpdateTagBoxesPositionData();
             ResizeResultBoxFontSize();
-
 
             try
             {
+                PrepareDataFromGameImage();
                 GetTagImages();
                 // old implementation here https://github.com/ravinyan/ArknightsTagMarker/blob/e046297ce13337cb64a2016ef28badc23d5c9c9a/MainWindow.xaml.cs#L352
                 MarkTag();
@@ -798,17 +729,6 @@ namespace ArknightsTagMarker
             ChangeOutputBoxPosition();
         }
 
-        // this is high scale number tweaking operation
-        public void ResizeTagBoxes()
-        {
-            MainGridBorderTop.Height = new GridLength(Height * 0.5);
-            MainGridBorderBottom.Height = new GridLength(Height * 0.30);
-
-            MainGridBorderLeft.Width = new GridLength(Width * 0.275);
-            MainGridBorderRight.Width = new GridLength(Width * 0.34);
-        }
-
-        // this too
         public void UpdateTagBoxesPositionData()
         {
             // if just one thing is same position (here first box X coordinate (col1)), then no need for update coz app wasnt resized
